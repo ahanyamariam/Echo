@@ -22,6 +22,7 @@ A production-style MVP real-time 1-to-1 direct messaging chat application built 
 16. [Troubleshooting](#troubleshooting)
 17. [Future Enhancements](#future-enhancements)
 18. [License](#license)
+19. [Quick DB Check (psql)](#quick-db-check-psql)
 
 ---
 
@@ -165,6 +166,8 @@ Echo is a full-stack real-time chat application that enables users to have priva
 ## Architecture
 
 ### High-Level Architecture
+
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ CLIENT │
 │ ┌────────────────────────────────────────────────────────────────────────┐ │
@@ -247,10 +250,11 @@ HTTP REST │ WebSocket (WS)
 │ │ └───────────────────────────────────────────────────────────────────┘ │ │
 │ └────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
-
+```
 
 ### Module Architecture
 
+```text
 Each backend module follows a three-layer architecture:
 ┌─────────────────────────────────────────────────────────────┐
 │ Handler │
@@ -274,9 +278,11 @@ Each backend module follows a three-layer architecture:
 │ - SQL queries │
 │ - Data access layer │
 └─────────────────────────────────────────────────────────────┘
-
+```
 
 ### WebSocket Architecture
+
+```text
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ WebSocket Hub │
 │ │
@@ -313,8 +319,11 @@ Client A Server Client B
 
 
 ---
+```
 
 ## Project Structure
+
+```text
 echo/
 │
 ├── backend/ # Go backend application
@@ -459,6 +468,7 @@ echo/
 
 
 ---
+```
 
 ## Prerequisites
 
@@ -479,7 +489,6 @@ echo/
 | Docker Compose | Orchestrate all services | Comes with Docker Desktop |
 
 ### Verify Installation
-
 
 Run these commands to verify your setup:
 
@@ -503,18 +512,20 @@ psql --version
 # Check Docker version (optional)
 docker --version
 # Expected: Docker version 20.x.x or higher
+```
 
 ## Installation
 
-Step 1: Clone the Repository
+### Step 1: Clone the Repository
 
-
+```bash
 git clone https://github.com/ahanyamariam/echo.git
 cd echo
+```
 
-Step 2: Backend Setup
+### Step 2: Backend Setup
 
-# Navigate to backend directory
+```bash
 cd backend
 
 # Copy environment file
@@ -527,10 +538,11 @@ go mod download
 
 # Verify dependencies
 go mod verify
+```
 
-Step 3: Frontend Setup
+### Step 3: Frontend Setup
 
-# Navigate to frontend directory
+```bash
 cd ../frontend
 
 # Copy environment file
@@ -538,14 +550,19 @@ cp .env.example .env
 
 # Install npm dependencies
 npm install
+```
 
-Step 4: Database Setup
-See the Database Setup section below.
+### Step 4: Database Setup
 
-Environment Variables
+See [Database Setup](#database-setup).
 
-Backend Environment Variables
-Create backend/.env with the following:
+## Environment Variables
+
+### Backend Environment Variables
+
+Create `backend/.env` with the following:
+
+```dotenv
 # Server Configuration
 PORT=8080
 ENV=development
@@ -560,31 +577,37 @@ JWT_EXPIRY=24h
 # Upload Configuration
 UPLOAD_DIR=./uploads
 MAX_UPLOAD_SIZE=5242880
+```
 
-Frontend Environment Variables
-Create frontend/.env with the following:
+### Frontend Environment Variables
 
+Create `frontend/.env` with the following:
+
+```dotenv
 VITE_API_URL=http://localhost:8080
 VITE_WS_URL=ws://localhost:8080/ws
+```
 
-Database Setup
- Using Docker (Recommended):
+## Database Setup
+
+### Using Docker (Recommended)
+
+```bash
 # Start PostgreSQL container
-docker run --name echo-postgres \
-  -e POSTGRES_USER=echo \
-  -e POSTGRES_PASSWORD=echo \
-  -e POSTGRES_DB=echo \
-  -p 5432:5432 \
-  -d postgres:15
+docker run --name echo-postgres   -e POSTGRES_USER=echo   -e POSTGRES_PASSWORD=echo   -e POSTGRES_DB=echo   -p 5432:5432   -d postgres:15
 
 # Verify container is running
 docker ps
 
 # Wait a few seconds for PostgreSQL to start
 sleep 5
+```
 
-Running Migrations
+### Running Migrations
+
 Navigate to the backend directory and run migrations:
+
+```bash
 cd backend
 
 # Run all migrations
@@ -593,7 +616,11 @@ PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/002_create_conve
 PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/003_create_messages.up.sql
 PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/004_create_reads.up.sql
 PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/005_create_uploads.up.sql
+```
 
+### Verify Tables
+
+```bash
 # Connect to database
 PGPASSWORD=echo psql -h localhost -U echo -d echo
 
@@ -611,9 +638,13 @@ PGPASSWORD=echo psql -h localhost -U echo -d echo
 #  public | uploads               | table | echo
 #  public | users                 | table | echo
 
-# Exit psql
+# Exit psql with:
+# \q
+```
 
-Rollback Migrations (If Needed)
+### Rollback Migrations (If Needed)
+
+```bash
 cd backend
 
 # Rollback in reverse order
@@ -622,38 +653,56 @@ PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/004_create_reads
 PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/003_create_messages.down.sql
 PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/002_create_conversations.down.sql
 PGPASSWORD=echo psql -h localhost -U echo -d echo -f migrations/001_create_users.down.sql
+```
 
-Running the Application
+## Running the Application
 
-Development Mode
+### Development Mode
+
 You need to run both the backend and frontend in separate terminals.
 
-Terminal 1: Start Backend
+#### Terminal 1: Start Backend
 
+```bash
 cd backend
 go run cmd/api/main.go
+```
+
 Expected output:
+
+```text
 2024/01/15 10:00:00 Connected to database
 2024/01/15 10:00:00 Server starting on port 8080
+```
 
-Terminal 2: Start Frontend
+#### Terminal 2: Start Frontend
+
+```bash
 cd frontend
 npm run dev
+```
 
 Expected output:
-  VITE v5.0.8  ready in 500 ms
 
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
-  ➜  press h + enter to show help
+```text
+VITE v5.0.8  ready in 500 ms
 
-  Access the Application
+➜  Local:   http://localhost:5173/
+➜  Network: use --host to expose
+➜  press h + enter to show help
+```
+
+#### Access the Application
 
 Open your browser and navigate to:
-http://localhost:5173
 
-Production Build
-Build Backend
+- http://localhost:5173
+
+### Production Build
+
+#### Build Backend
+
+```bash
 cd backend
 
 # Build binary
@@ -661,8 +710,11 @@ go build -o bin/echo-api cmd/api/main.go
 
 # Run binary
 ./bin/echo-api
+```
 
-Build Frontend
+#### Build Frontend
+
+```bash
 cd frontend
 
 # Create production build
@@ -672,9 +724,13 @@ npm run build
 npm run preview
 
 # Or serve the dist folder with any static file server
+```
 
-Using Docker Compose
-Create docker-compose.yml in the project root:
+### Using Docker Compose
+
+Create `docker-compose.yml` in the project root:
+
+```yaml
 version: '3.8'
 
 services:
@@ -730,49 +786,69 @@ services:
 volumes:
   postgres_data:
   uploads_data:
+```
 
-  API Documentation
+## API Documentation
 
-Base URL
-http://localhost:8080
+### Base URL
 
-Authentication
-All endpoints marked with 🔒 require authentication.
+`http://localhost:8080`
 
-Include the JWT token in the Authorization header:
+### Authentication
+
+All endpoints marked with **🔒** require authentication.
+
+Include the JWT token in the `Authorization` header:
+
+```text
 Authorization: Bearer <your_jwt_token>
+```
 
-Response Format
-All responses follow this format:
+### Response Format
 
-Success Response:
+All responses follow this format.
+
+Success response:
+
+```json
 {
-  "data": { ... }
+  "data": { }
 }
+```
 
-Error Response:
+Error response:
+
+```json
 {
   "error": "Error message here"
 }
+```
 
-Authentication Endpoints
-POST /auth/signup
+### Authentication Endpoints
+
+#### POST `/auth/signup`
 
 Create a new user account.
 
-Request Body:
+Request body:
+
+```json
 {
   "username": "johndoe",
   "email": "john@example.com",
   "password": "password123"
 }
-Validation Rules:
+```
 
-username: Required, 3-50 characters
-email: Required, valid email format
-password: Required, minimum 6 characters
-Success Response (201 Created):
+Validation rules:
 
+- `username`: Required, 3–50 characters
+- `email`: Required, valid email format
+- `password`: Required, minimum 6 characters
+
+Success response (201 Created):
+
+```json
 {
   "user": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -781,41 +857,44 @@ Success Response (201 Created):
     "created_at": "2024-01-15T10:30:00Z"
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
 
-Error Responses:
+Error responses:
 
-Status	Error	Cause
-400	Username, email, and password are required	Missing fields
-400	Username must be between 3 and 50 characters	Invalid username length
-400	Password must be at least 6 characters	Password too short
-409	User with this email or username already exists	Duplicate user
+| Status | Error | Cause |
+|---:|---|---|
+| 400 | Username, email, and password are required | Missing fields |
+| 400 | Username must be between 3 and 50 characters | Invalid username length |
+| 400 | Password must be at least 6 characters | Password too short |
+| 409 | User with this email or username already exists | Duplicate user |
+
 Example:
 
-
-curl -X POST http://localhost:8080/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
+```bash
+curl -X POST http://localhost:8080/auth/signup   -H "Content-Type: application/json"   -d '{
     "username": "johndoe",
     "email": "john@example.com",
     "password": "password123"
   }'
+```
 
-POST /auth/login
+#### POST `/auth/login`
 
 Authenticate an existing user.
 
-Request Body:
+Request body:
 
-
-
+```json
 {
   "email": "john@example.com",
   "password": "password123"
 }
-Success Response (200 OK):
+```
 
+Success response (200 OK):
 
-
+```json
 {
   "user": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -825,58 +904,66 @@ Success Response (200 OK):
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
-Error Responses:
+```
 
-Status	Error	Cause
-400	Email and password are required	Missing fields
-401	Invalid email or password	Wrong credentials
+Error responses:
+
+| Status | Error | Cause |
+|---:|---|---|
+| 400 | Email and password are required | Missing fields |
+| 401 | Invalid email or password | Wrong credentials |
+
 Example:
 
-
-
-curl -X POST http://localhost:8080/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
+```bash
+curl -X POST http://localhost:8080/auth/login   -H "Content-Type: application/json"   -d '{
     "email": "john@example.com",
     "password": "password123"
   }'
-Users Endpoints
-GET /users/me 🔒
+```
 
-Get current authenticated user's profile.
+### Users Endpoints
 
-Success Response (200 OK):
+#### GET `/users/me` 🔒
 
+Get the current authenticated user's profile.
 
+Success response (200 OK):
 
+```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "username": "johndoe",
   "email": "john@example.com"
 }
-Error Responses:
+```
 
-Status	Error	Cause
-401	Unauthorized	Missing or invalid token
-404	User not found	User no longer exists
+Error responses:
+
+| Status | Error | Cause |
+|---:|---|---|
+| 401 | Unauthorized | Missing or invalid token |
+| 404 | User not found | User no longer exists |
+
 Example:
 
+```bash
+curl http://localhost:8080/users/me   -H "Authorization: Bearer <your_token>"
+```
 
-
-curl http://localhost:8080/users/me \
-  -H "Authorization: Bearer <your_token>"
-GET /users/search?q={query} 🔒
+#### GET `/users/search?q={query}` 🔒
 
 Search for users by username.
 
-Query Parameters:
+Query parameters:
 
-Parameter	Type	Required	Description
-q	string	Yes	Search query (minimum 2 characters)
-Success Response (200 OK):
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `q` | string | ✅ | Search query (minimum 2 characters) |
 
+Success response (200 OK):
 
-
+```json
 {
   "users": [
     {
@@ -889,27 +976,30 @@ Success Response (200 OK):
     }
   ]
 }
+```
+
 Notes:
 
-Returns maximum 20 results
-Excludes the current user from results
-Case-insensitive search
-Matches partial usernames
+- Returns maximum 20 results
+- Excludes the current user from results
+- Case-insensitive search
+- Matches partial usernames
+
 Example:
 
+```bash
+curl "http://localhost:8080/users/search?q=john"   -H "Authorization: Bearer <your_token>"
+```
 
+### Conversations Endpoints
 
-curl "http://localhost:8080/users/search?q=john" \
-  -H "Authorization: Bearer <your_token>"
-Conversations Endpoints
-GET /conversations 🔒
+#### GET `/conversations` 🔒
 
 List all conversations for the authenticated user.
 
-Success Response (200 OK):
+Success response (200 OK):
 
-
-
+```json
 {
   "conversations": [
     {
@@ -931,32 +1021,35 @@ Success Response (200 OK):
     }
   ]
 }
+```
+
 Notes:
 
-Sorted by most recent message (newest first)
-last_message is null if no messages exist
-unread_count is the number of unread messages from the other user
+- Sorted by most recent message (newest first)
+- `last_message` is `null` if no messages exist
+- `unread_count` is the number of unread messages from the other user
+
 Example:
 
+```bash
+curl http://localhost:8080/conversations   -H "Authorization: Bearer <your_token>"
+```
 
-
-curl http://localhost:8080/conversations \
-  -H "Authorization: Bearer <your_token>"
-POST /conversations 🔒
+#### POST `/conversations` 🔒
 
 Create a new DM conversation or return existing one (idempotent).
 
-Request Body:
+Request body:
 
-
-
+```json
 {
   "other_user_id": "550e8400-e29b-41d4-a716-446655440001"
 }
-Success Response (201 Created - New Conversation):
+```
 
+Success response (201 Created — new conversation):
 
-
+```json
 {
   "conversation": {
     "id": "550e8400-e29b-41d4-a716-446655440010",
@@ -969,10 +1062,11 @@ Success Response (201 Created - New Conversation):
   },
   "created": true
 }
-Success Response (200 OK - Existing Conversation):
+```
 
+Success response (200 OK — existing conversation):
 
-
+```json
 {
   "conversation": {
     "id": "550e8400-e29b-41d4-a716-446655440010",
@@ -985,37 +1079,41 @@ Success Response (200 OK - Existing Conversation):
   },
   "created": false
 }
-Error Responses:
+```
 
-Status	Error	Cause
-400	other_user_id is required	Missing field
-400	Cannot create conversation with yourself	Self-conversation attempt
-404	User not found	Other user doesn't exist
+Error responses:
+
+| Status | Error | Cause |
+|---:|---|---|
+| 400 | `other_user_id` is required | Missing field |
+| 400 | Cannot create conversation with yourself | Self-conversation attempt |
+| 404 | User not found | Other user doesn't exist |
+
 Example:
 
-
-
-curl -X POST http://localhost:8080/conversations \
-  -H "Authorization: Bearer <your_token>" \
-  -H "Content-Type: application/json" \
-  -d '{
+```bash
+curl -X POST http://localhost:8080/conversations   -H "Authorization: Bearer <your_token>"   -H "Content-Type: application/json"   -d '{
     "other_user_id": "550e8400-e29b-41d4-a716-446655440001"
   }'
-Messages Endpoints
-GET /messages 🔒
+```
+
+### Messages Endpoints
+
+#### GET `/messages` 🔒
 
 Get messages for a conversation with cursor-based pagination.
 
-Query Parameters:
+Query parameters:
 
-Parameter	Type	Required	Description
-conversation_id	UUID	Yes	Conversation ID
-limit	integer	No	Max messages to return (default: 50, max: 100)
-before	UUID	No	Return messages before this message ID
-Success Response (200 OK):
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `conversation_id` | UUID | ✅ | Conversation ID |
+| `limit` | integer | ❌ | Max messages to return (default: 50, max: 100) |
+| `before` | UUID | ❌ | Return messages before this message ID |
 
+Success response (200 OK):
 
-
+```json
 {
   "messages": [
     {
@@ -1025,13 +1123,50 @@ Success Response (200 OK):
       "message_type": "text",
       "text": "Hello!",
       "created_at": "2024-01-15T11:00:00Z"
-    },
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440021",
-      "conversation_id": "550e8400-e29b-41d4-a716-446655440010",
-      "sender_id": 
+    }
+    // ...more messages...
+  ]
+}
+```
 
+> Note: The original README content ended mid-example. The snippet above keeps the same intent, but is shown in a consistent, readable format.
 
+## WebSocket Events
+
+_TODO: Document the WebSocket event names and payloads (client → server and server → client)._
+
+## Database Schema
+
+_TODO: Add an ERD-style overview and list of tables/columns/indexes._
+
+## Development Phases
+
+_TODO: Outline phase-by-phase milestones (MVP → polish → deploy)._
+
+## Testing
+
+_TODO: Add unit/integration test strategy and commands._
+
+## Troubleshooting
+
+_TODO: Add common setup/runtime issues and fixes._
+
+## Future Enhancements
+
+_TODO: Track planned features and nice-to-haves._
+
+## License
+
+See the `LICENSE` file in the repository.
+
+## Quick DB Check (psql)
+
+If you're running PostgreSQL in the `echo-postgres` Docker container, you can quickly jump into `psql` and query the `users` table:
+
+```bash
 docker exec -it echo-postgres psql -U echo -d echo
-SELECT * FROM users;
+```
 
+```sql
+SELECT * FROM users;
+```
