@@ -16,7 +16,12 @@ import (
 
 	"github.com/ahanyamariam/echo/internal/auth"
 	"github.com/ahanyamariam/echo/internal/config"
+	"github.com/ahanyamariam/echo/internal/conversations"
 	"github.com/ahanyamariam/echo/internal/db"
+	"github.com/ahanyamariam/echo/internal/messages"
+	"github.com/ahanyamariam/echo/internal/middleware"
+	"github.com/ahanyamariam/echo/internal/realtime"
+	"github.com/ahanyamariam/echo/internal/users"
 )
 
 func main() {
@@ -35,10 +40,29 @@ func main() {
 
 	log.Println("Connected to database")
 
-	// Initialize auth module
+	// Initialize repositories
 	authRepo := auth.NewRepository(pool)
+	usersRepo := users.NewRepository(pool)
+	convsRepo := conversations.NewRepository(pool)
+	msgsRepo := messages.NewRepository(pool)
+
+	// Initialize services
 	authService := auth.NewService(authRepo, cfg.JWTSecret, cfg.JWTExpiry)
+	usersService := users.NewService(usersRepo)
+	convsService := conversations.NewService(convsRepo)
+	msgsService := messages.NewService(msgsRepo, convsRepo)
+
+	// Initialize WebSocket hub
+	hub := realtime.NewHub()
+	go hub.Run()
+	log.Println("WebSocket hub started")
+
+	// Initialize handlers
 	authHandler := auth.NewHandler(authService)
+	usersHandler := users.NewHandler(usersService)
+	convsHandler := conversations.NewHandler(convsService)
+	msgsHandler := messages.NewHandler(msgsService)
+	wsHandler := realtime.NewHandler(hub, authService, msgsService, convsService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -65,16 +89,41 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	// Auth routes
+	// WebSocket endpoint (public - auth via query param)
+	r.Get("/ws", wsHandler.HandleWebSocket)
+
+	// Public routes - Auth
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/signup", authHandler.Signup)
 		r.Post("/login", authHandler.Login)
 	})
 
-	// Create upload directory
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.AuthMiddleware(authService))
+
+		// Users
+		r.Route("/users", func(r chi.Router) {
+			r.Get("/me", usersHandler.GetMe)
+			r.Get("/search", usersHandler.Search)
+		})
+
+		// Conversations
+		r.Route("/conversations", func(r chi.Router) {
+			r.Get("/", convsHandler.List)
+			r.Post("/", convsHandler.Create)
+		})
+
+		// Messages
+		r.Get("/messages", msgsHandler.List)
+	})
+
+	// Serve uploaded files
 	if err := os.MkdirAll(cfg.UploadDir, 0755); err != nil {
 		log.Fatalf("Failed to create upload directory: %v", err)
 	}
+	fileServer := http.FileServer(http.Dir(cfg.UploadDir))
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", fileServer))
 
 	// Start server
 	server := &http.Server{
