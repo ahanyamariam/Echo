@@ -16,12 +16,10 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// In production, check against allowed origins
 		return true
 	},
 }
 
-// Handler handles WebSocket connections
 type Handler struct {
 	hub         *Hub
 	authService *auth.Service
@@ -29,7 +27,6 @@ type Handler struct {
 	convService *conversations.Service
 }
 
-// NewHandler creates a new WebSocket handler
 func NewHandler(hub *Hub, authService *auth.Service, msgService *messages.Service, convService *conversations.Service) *Handler {
 	return &Handler{
 		hub:         hub,
@@ -65,6 +62,7 @@ type MessagePayload struct {
 	Text           *string `json:"text,omitempty"`
 	MediaURL       *string `json:"media_url,omitempty"`
 	CreatedAt      string  `json:"created_at"`
+	ExpiresAt      *string `json:"expires_at,omitempty"`
 }
 
 type WSError struct {
@@ -79,41 +77,33 @@ type WSReadUpdate struct {
 	LastReadMessageID string `json:"last_read_message_id"`
 }
 
-// HandleWebSocket handles WebSocket upgrade and connection
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Get token from query parameter
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Validate token
 	claims, err := h.authService.ValidateToken(token)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
 
-	// Create client
 	client := NewClient(h.hub, conn, claims.UserID, claims.Username, h.handleMessage)
 
-	// Register client
 	h.hub.register <- client
 
-	// Start read/write pumps
 	go client.WritePump()
 	go client.ReadPump()
 }
 
-// handleMessage processes incoming WebSocket messages
 func (h *Handler) handleMessage(client *Client, data []byte) {
 	var baseMsg WSMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
@@ -131,7 +121,6 @@ func (h *Handler) handleMessage(client *Client, data []byte) {
 	}
 }
 
-// handleMessageSend handles sending a new message
 func (h *Handler) handleMessageSend(client *Client, data []byte) {
 	var msg WSMessageSend
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -139,7 +128,6 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 		return
 	}
 
-	// Validate message
 	if msg.ConversationID == "" {
 		h.sendError(client, "conversation_id is required")
 		return
@@ -160,7 +148,6 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 		return
 	}
 
-	// Prepare text and media_url pointers
 	var textPtr, mediaURLPtr *string
 	if msg.MessageType == "text" {
 		textPtr = &msg.Text
@@ -168,7 +155,6 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 		mediaURLPtr = &msg.MediaURL
 	}
 
-	// Create message in database
 	ctx := context.Background()
 	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr)
 	if err != nil {
@@ -181,14 +167,19 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 		return
 	}
 
-	// Get conversation members
 	memberIDs, err := h.convService.GetMemberIDs(ctx, msg.ConversationID)
 	if err != nil {
 		log.Printf("Failed to get conversation members: %v", err)
 		return
 	}
 
-	// Build response
+	// Build response with optional expires_at
+	var expiresAtStr *string
+	if message.ExpiresAt != nil {
+		formatted := message.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+		expiresAtStr = &formatted
+	}
+
 	response := WSMessageNew{
 		Type: "message_new",
 		Message: &MessagePayload{
@@ -199,16 +190,15 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 			Text:           message.Text,
 			MediaURL:       message.MediaURL,
 			CreatedAt:      message.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ExpiresAt:      expiresAtStr,
 		},
 	}
 
-	// Broadcast to all members (including sender for confirmation)
 	if err := h.hub.BroadcastToUsers(memberIDs, response); err != nil {
 		log.Printf("Failed to broadcast message: %v", err)
 	}
 }
 
-// handleReadUpdate handles read receipt updates
 func (h *Handler) handleReadUpdate(client *Client, data []byte) {
 	var msg WSReadUpdate
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -221,7 +211,6 @@ func (h *Handler) handleReadUpdate(client *Client, data []byte) {
 		return
 	}
 
-	// Verify membership
 	ctx := context.Background()
 	isMember, err := h.convService.IsMember(ctx, msg.ConversationID, client.UserID)
 	if err != nil || !isMember {
@@ -229,14 +218,18 @@ func (h *Handler) handleReadUpdate(client *Client, data []byte) {
 		return
 	}
 
-	// Get conversation members to broadcast
+	// Persist read status to database
+	if err := h.convService.UpdateReadStatus(ctx, msg.ConversationID, client.UserID, msg.LastReadMessageID); err != nil {
+		log.Printf("Failed to update read status: %v", err)
+		// Continue anyway to broadcast to other users
+	}
+
 	memberIDs, err := h.convService.GetMemberIDs(ctx, msg.ConversationID)
 	if err != nil {
 		log.Printf("Failed to get conversation members: %v", err)
 		return
 	}
 
-	// Broadcast read update to other members
 	response := WSReadUpdate{
 		Type:              "read_update",
 		ConversationID:    msg.ConversationID,
@@ -244,7 +237,6 @@ func (h *Handler) handleReadUpdate(client *Client, data []byte) {
 		LastReadMessageID: msg.LastReadMessageID,
 	}
 
-	// Only send to other members (not the sender)
 	for _, memberID := range memberIDs {
 		if memberID != client.UserID {
 			if err := h.hub.BroadcastToUsers([]string{memberID}, response); err != nil {
@@ -254,7 +246,6 @@ func (h *Handler) handleReadUpdate(client *Client, data []byte) {
 	}
 }
 
-// sendError sends an error message to the client
 func (h *Handler) sendError(client *Client, message string) {
 	client.SendJSON(WSError{
 		Type:  "error",

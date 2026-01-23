@@ -1,29 +1,25 @@
 import { create } from 'zustand';
-import type { Conversation, Message } from '../types';
+import type { Conversation, Message, DisappearingMessages } from '../types';
 
 interface ChatState {
-  // Conversations
   conversations: Conversation[];
   activeConversationId: string | null;
-
-  // Messages (keyed by conversation ID)
   messages: Record<string, Message[]>;
   hasMoreMessages: Record<string, boolean>;
-
-  // Loading states
   conversationsLoading: boolean;
   messagesLoading: boolean;
 
-  // Actions
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
   setActiveConversation: (id: string | null) => void;
   updateConversationLastMessage: (message: Message) => void;
+  updateConversationDisappearing: (conversationId: string, settings: DisappearingMessages) => void;
 
   setMessages: (conversationId: string, messages: Message[]) => void;
   prependMessages: (conversationId: string, messages: Message[]) => void;
   addMessage: (message: Message) => void;
   setHasMore: (conversationId: string, hasMore: boolean) => void;
+  removeExpiredMessages: (conversationId: string) => void;
 
   setConversationsLoading: (loading: boolean) => void;
   setMessagesLoading: (loading: boolean) => void;
@@ -31,7 +27,6 @@ interface ChatState {
   resetUnreadCount: (conversationId: string) => void;
   incrementUnreadCount: (conversationId: string) => void;
 
-  // Cleanup
   clearMessages: (conversationId: string) => void;
   reset: () => void;
 }
@@ -45,7 +40,7 @@ const initialState = {
   messagesLoading: false,
 };
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   ...initialState,
 
   setConversations: (conversations) => {
@@ -54,7 +49,6 @@ export const useChatStore = create<ChatState>((set) => ({
 
   addConversation: (conversation) => {
     set((state) => {
-      // Check if conversation already exists
       const exists = state.conversations.some((c) => c.id === conversation.id);
       if (exists) {
         return state;
@@ -77,15 +71,19 @@ export const useChatStore = create<ChatState>((set) => ({
         if (conv.id === message.conversation_id) {
           return {
             ...conv,
-            last_message: message,
-            // Only increment unread if not in active conversation and not sender
+            last_message: {
+              id: message.id,
+              message_type: message.message_type,
+              text: message.text,
+              sender_id: message.sender_id,
+              created_at: message.created_at,
+            },
             unread_count: conv.id !== activeId ? conv.unread_count + 1 : conv.unread_count,
           };
         }
         return conv;
       });
 
-      // Sort by last message time
       updatedConversations.sort((a, b) => {
         const aTime = a.last_message?.created_at || a.created_at;
         const bTime = b.last_message?.created_at || b.created_at;
@@ -94,6 +92,16 @@ export const useChatStore = create<ChatState>((set) => ({
 
       return { conversations: updatedConversations };
     });
+  },
+
+  updateConversationDisappearing: (conversationId, settings) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? { ...conv, disappearing_messages: settings }
+          : conv
+      ),
+    }));
   },
 
   setMessages: (conversationId, messages) => {
@@ -119,7 +127,6 @@ export const useChatStore = create<ChatState>((set) => ({
       const conversationId = message.conversation_id;
       const existingMessages = state.messages[conversationId] || [];
 
-      // Check for duplicates
       if (existingMessages.some((m) => m.id === message.id)) {
         return state;
       }
@@ -140,6 +147,28 @@ export const useChatStore = create<ChatState>((set) => ({
         [conversationId]: hasMore,
       },
     }));
+  },
+
+  removeExpiredMessages: (conversationId) => {
+    set((state) => {
+      const messages = state.messages[conversationId] || [];
+      const now = new Date();
+      const filtered = messages.filter((msg) => {
+        if (!msg.expires_at) return true;
+        return new Date(msg.expires_at) > now;
+      });
+
+      if (filtered.length === messages.length) {
+        return state;
+      }
+
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: filtered,
+        },
+      };
+    });
   },
 
   setConversationsLoading: (loading) => {

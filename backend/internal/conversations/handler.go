@@ -2,9 +2,9 @@ package conversations
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/ahanyamariam/echo/internal/common"
 	"github.com/ahanyamariam/echo/internal/middleware"
 )
@@ -21,6 +21,11 @@ type CreateRequest struct {
 	OtherUserID string `json:"other_user_id"`
 }
 
+type UpdateDisappearingRequest struct {
+	Enabled         bool `json:"enabled"`
+	DurationSeconds int  `json:"duration_seconds,omitempty"`
+}
+
 type OtherUserResponse struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
@@ -34,13 +39,19 @@ type LastMessageResponse struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type DisappearingMessagesResponse struct {
+	Enabled         bool `json:"enabled"`
+	DurationSeconds int  `json:"duration_seconds"`
+}
+
 type ConversationResponse struct {
-	ID          string               `json:"id"`
-	Type        string               `json:"type"`
-	CreatedAt   string               `json:"created_at"`
-	OtherUser   OtherUserResponse    `json:"other_user"`
-	LastMessage *LastMessageResponse `json:"last_message,omitempty"`
-	UnreadCount int                  `json:"unread_count"`
+	ID                  string                        `json:"id"`
+	Type                string                        `json:"type"`
+	CreatedAt           string                        `json:"created_at"`
+	OtherUser           OtherUserResponse             `json:"other_user"`
+	LastMessage         *LastMessageResponse          `json:"last_message,omitempty"`
+	UnreadCount         int                           `json:"unread_count"`
+	DisappearingMessages DisappearingMessagesResponse `json:"disappearing_messages"`
 }
 
 type ListResponse struct {
@@ -76,6 +87,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 				Username: conv.OtherUsername,
 			},
 			UnreadCount: conv.UnreadCount,
+			DisappearingMessages: DisappearingMessagesResponse{
+				Enabled:         conv.DisappearingMessagesEnabled,
+				DurationSeconds: conv.DisappearingMessagesDuration,
+			},
 		}
 
 		if conv.LastMessageID != nil {
@@ -125,7 +140,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			common.Error(w, http.StatusNotFound, "User not found")
 			return
 		}
-		log.Printf("Failed to create conversation: %v", err)
 		common.Error(w, http.StatusInternalServerError, "Failed to create conversation")
 		return
 	}
@@ -145,7 +159,52 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				Username: conv.OtherUsername,
 			},
 			UnreadCount: 0,
+			DisappearingMessages: DisappearingMessagesResponse{
+				Enabled:         conv.DisappearingMessagesEnabled,
+				DurationSeconds: conv.DisappearingMessagesDuration,
+			},
 		},
 		Created: created,
+	})
+}
+
+func (h *Handler) UpdateDisappearingMessages(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		common.Error(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	conversationID := chi.URLParam(r, "id")
+	if conversationID == "" {
+		common.Error(w, http.StatusBadRequest, "Conversation ID required")
+		return
+	}
+
+	var req UpdateDisappearingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		common.Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Default to 24 hours if not specified
+	if req.DurationSeconds <= 0 {
+		req.DurationSeconds = 86400 // 24 hours
+	}
+
+	err := h.service.UpdateDisappearingMessages(r.Context(), conversationID, userID, req.Enabled, req.DurationSeconds)
+	if err != nil {
+		if err.Error() == "not a member" {
+			common.Error(w, http.StatusForbidden, "Not a member of this conversation")
+			return
+		}
+		common.Error(w, http.StatusInternalServerError, "Failed to update settings")
+		return
+	}
+
+	common.Success(w, http.StatusOK, map[string]interface{}{
+		"success":          true,
+		"enabled":          req.Enabled,
+		"duration_seconds": req.DurationSeconds,
 	})
 }
