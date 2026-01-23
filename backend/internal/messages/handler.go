@@ -24,6 +24,7 @@ type MessageResponse struct {
 	Text           *string `json:"text,omitempty"`
 	MediaURL       *string `json:"media_url,omitempty"`
 	CreatedAt      string  `json:"created_at"`
+	ExpiresAt      *string `json:"expires_at,omitempty"`
 }
 
 type ListResponse struct {
@@ -78,6 +79,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		if msg.MediaURL != nil {
 			mr.MediaURL = msg.MediaURL
+		}
+		if msg.ExpiresAt != nil {
+			expiresAtStr := msg.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+			mr.ExpiresAt = &expiresAtStr
 		}
 
 		response = append(response, mr)

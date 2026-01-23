@@ -51,3 +51,20 @@ func (s *Service) GetMemberIDs(ctx context.Context, conversationID string) ([]st
 func (s *Service) GetByID(ctx context.Context, conversationID string) (*ConversationWithDetails, error) {
 	return s.repo.GetByID(ctx, conversationID)
 }
+
+func (s *Service) UpdateDisappearingMessages(ctx context.Context, conversationID, userID string, enabled bool, durationSeconds int) error {
+	// Verify membership
+	isMember, err := s.repo.IsMember(ctx, conversationID, userID)
+	if err != nil {
+		return err
+	}
+	if !isMember {
+		return errors.New("not a member")
+	}
+
+	return s.repo.UpdateDisappearingMessages(ctx, conversationID, enabled, durationSeconds)
+}
+
+func (s *Service) UpdateReadStatus(ctx context.Context, conversationID, userID, lastReadMessageID string) error {
+	return s.repo.UpdateReadStatus(ctx, conversationID, userID, lastReadMessageID)
+}

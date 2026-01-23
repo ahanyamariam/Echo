@@ -18,17 +18,19 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 }
 
 type ConversationWithDetails struct {
-	ID                  string
-	Type                string
-	CreatedAt           time.Time
-	OtherUserID         string
-	OtherUsername       string
-	LastMessageID       *string
-	LastMessageType     *string
-	LastMessageText     *string
-	LastMessageSenderID *string
-	LastMessageAt       *time.Time
-	UnreadCount         int
+	ID                           string
+	Type                         string
+	CreatedAt                    time.Time
+	OtherUserID                  string
+	OtherUsername                string
+	LastMessageID                *string
+	LastMessageType              *string
+	LastMessageText              *string
+	LastMessageSenderID          *string
+	LastMessageAt                *time.Time
+	UnreadCount                  int
+	DisappearingMessagesEnabled  bool
+	DisappearingMessagesDuration int
 }
 
 func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*ConversationWithDetails, error) {
@@ -85,8 +87,11 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*Convers
 			lm.text,
 			lm.sender_id,
 			lm.created_at,
-			COALESCE(urc.unread_count, 0)
+			COALESCE(urc.unread_count, 0),
+			c.disappearing_messages_enabled,
+			c.disappearing_messages_duration
 		FROM user_conversations uc
+		JOIN conversations c ON uc.id = c.id
 		JOIN other_users ou ON uc.id = ou.conversation_id
 		LEFT JOIN last_messages lm ON uc.id = lm.conversation_id
 		LEFT JOIN unread_counts urc ON uc.id = urc.conversation_id
@@ -114,6 +119,8 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*Convers
 			&conv.LastMessageSenderID,
 			&conv.LastMessageAt,
 			&conv.UnreadCount,
+			&conv.DisappearingMessagesEnabled,
+			&conv.DisappearingMessagesDuration,
 		)
 		if err != nil {
 			return nil, err
@@ -239,8 +246,9 @@ func (r *Repository) GetMemberIDs(ctx context.Context, conversationID string) ([
 func (r *Repository) GetByID(ctx context.Context, conversationID string) (*ConversationWithDetails, error) {
 	var conv ConversationWithDetails
 	err := r.db.QueryRow(ctx, `
-		SELECT id, type, created_at FROM conversations WHERE id = $1
-	`, conversationID).Scan(&conv.ID, &conv.Type, &conv.CreatedAt)
+		SELECT id, type, created_at, disappearing_messages_enabled, disappearing_messages_duration 
+		FROM conversations WHERE id = $1
+	`, conversationID).Scan(&conv.ID, &conv.Type, &conv.CreatedAt, &conv.DisappearingMessagesEnabled, &conv.DisappearingMessagesDuration)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -250,4 +258,23 @@ func (r *Repository) GetByID(ctx context.Context, conversationID string) (*Conve
 	}
 
 	return &conv, nil
+}
+
+func (r *Repository) UpdateDisappearingMessages(ctx context.Context, conversationID string, enabled bool, durationSeconds int) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE conversations 
+		SET disappearing_messages_enabled = $2, disappearing_messages_duration = $3
+		WHERE id = $1
+	`, conversationID, enabled, durationSeconds)
+	return err
+}
+
+func (r *Repository) UpdateReadStatus(ctx context.Context, conversationID, userID, lastReadMessageID string) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO conversation_reads (conversation_id, user_id, last_read_message_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (conversation_id, user_id) 
+		DO UPDATE SET last_read_message_id = $3, updated_at = NOW()
+	`, conversationID, userID, lastReadMessageID)
+	return err
 }

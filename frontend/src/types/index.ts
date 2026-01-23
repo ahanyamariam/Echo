@@ -13,6 +13,7 @@ export interface Message {
   text?: string;
   media_url?: string;
   created_at: string;
+  expires_at?: string;
 }
 
 export interface LastMessage {
@@ -23,6 +24,11 @@ export interface LastMessage {
   created_at: string;
 }
 
+export interface DisappearingMessages {
+  enabled: boolean;
+  duration_seconds: number;
+}
+
 export interface Conversation {
   id: string;
   type: 'dm';
@@ -30,6 +36,7 @@ export interface Conversation {
   other_user: User;
   last_message?: LastMessage;
   unread_count: number;
+  disappearing_messages: DisappearingMessages;
 }
 
 export interface AuthResponse {
@@ -37,7 +44,7 @@ export interface AuthResponse {
   token: string;
 }
 
-// WebSocket Event Types (for Week 3)
+// WebSocket Event Types
 export interface WSMessage {
   type: string;
   [key: string]: unknown;

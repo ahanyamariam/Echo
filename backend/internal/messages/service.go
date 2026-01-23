@@ -3,6 +3,7 @@ package messages
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/ahanyamariam/echo/internal/conversations"
 )
@@ -42,9 +43,21 @@ func (s *Service) Create(ctx context.Context, conversationID, senderID, messageT
 		return nil, errors.New("not a member")
 	}
 
-	return s.repo.Create(ctx, conversationID, senderID, messageType, text, mediaURL)
+	// Check if conversation has disappearing messages enabled
+	var expiresAt *time.Time
+	conv, err := s.convRepo.GetByID(ctx, conversationID)
+	if err == nil && conv.DisappearingMessagesEnabled {
+		expiry := time.Now().Add(time.Duration(conv.DisappearingMessagesDuration) * time.Second)
+		expiresAt = &expiry
+	}
+
+	return s.repo.Create(ctx, conversationID, senderID, messageType, text, mediaURL, expiresAt)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*Message, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *Service) CleanupExpiredMessages(ctx context.Context) (int64, error) {
+	return s.repo.DeleteExpiredMessages(ctx)
 }

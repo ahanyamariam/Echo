@@ -18,6 +18,7 @@ import (
 	"github.com/ahanyamariam/echo/internal/config"
 	"github.com/ahanyamariam/echo/internal/conversations"
 	"github.com/ahanyamariam/echo/internal/db"
+	"github.com/ahanyamariam/echo/internal/jobs"
 	"github.com/ahanyamariam/echo/internal/messages"
 	"github.com/ahanyamariam/echo/internal/middleware"
 	"github.com/ahanyamariam/echo/internal/realtime"
@@ -25,13 +26,11 @@ import (
 )
 
 func main() {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Connect to database
 	pool, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -57,6 +56,11 @@ func main() {
 	go hub.Run()
 	log.Println("WebSocket hub started")
 
+	// Start cleanup job for expired messages (runs every 5 minutes)
+	cleanupJob := jobs.NewCleanupJob(msgsService, 5*time.Minute)
+	cleanupJob.Start()
+	log.Println("Cleanup job started")
+
 	// Initialize handlers
 	authHandler := auth.NewHandler(authService)
 	usersHandler := users.NewHandler(usersService)
@@ -76,10 +80,10 @@ func main() {
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
@@ -89,7 +93,7 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	// WebSocket endpoint (public - auth via query param)
+	// WebSocket endpoint
 	r.Get("/ws", wsHandler.HandleWebSocket)
 
 	// Public routes - Auth
@@ -112,6 +116,7 @@ func main() {
 		r.Route("/conversations", func(r chi.Router) {
 			r.Get("/", convsHandler.List)
 			r.Post("/", convsHandler.Create)
+			r.Patch("/{id}/disappearing", convsHandler.UpdateDisappearingMessages)
 		})
 
 		// Messages
@@ -134,7 +139,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown
 	go func() {
 		log.Printf("Server starting on port %s", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -147,6 +151,9 @@ func main() {
 	<-quit
 
 	log.Println("Server shutting down...")
+
+	// Stop cleanup job
+	cleanupJob.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
