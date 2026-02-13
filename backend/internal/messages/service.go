@@ -33,7 +33,7 @@ func (s *Service) List(ctx context.Context, conversationID, userID string, limit
 	return s.repo.List(ctx, conversationID, limit, before)
 }
 
-func (s *Service) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string) (*Message, error) {
+func (s *Service) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time, isOneTime bool) (*Message, error) {
 	// Verify membership
 	isMember, err := s.convRepo.IsMember(ctx, conversationID, senderID)
 	if err != nil {
@@ -44,18 +44,39 @@ func (s *Service) Create(ctx context.Context, conversationID, senderID, messageT
 	}
 
 	// Check if conversation has disappearing messages enabled
-	var expiresAt *time.Time
-	conv, err := s.convRepo.GetByID(ctx, conversationID)
-	if err == nil && conv.DisappearingMessagesEnabled {
-		expiry := time.Now().Add(time.Duration(conv.DisappearingMessagesDuration) * time.Second)
-		expiresAt = &expiry
+	// If expiresAt is passed from arg (e.g. from frontend), use it.
+	// Otherwise check conversation settings.
+	if expiresAt == nil {
+		conv, err := s.convRepo.GetByID(ctx, conversationID)
+		if err == nil && conv.DisappearingMessagesEnabled {
+			expiry := time.Now().Add(time.Duration(conv.DisappearingMessagesDuration) * time.Second)
+			expiresAt = &expiry
+		}
 	}
 
-	return s.repo.Create(ctx, conversationID, senderID, messageType, text, mediaURL, expiresAt)
+	return s.repo.Create(ctx, conversationID, senderID, messageType, text, mediaURL, expiresAt, isOneTime)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*Message, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *Service) MarkAsViewed(ctx context.Context, messageID, userID string) error {
+	msg, err := s.repo.GetByID(ctx, messageID)
+	if err != nil {
+		return err
+	}
+
+	// Verify membership
+	isMember, err := s.convRepo.IsMember(ctx, msg.ConversationID, userID)
+	if err != nil {
+		return err
+	}
+	if !isMember {
+		return errors.New("not a member")
+	}
+
+	return s.repo.MarkAsViewed(ctx, messageID)
 }
 
 func (s *Service) CleanupExpiredMessages(ctx context.Context) (int64, error) {

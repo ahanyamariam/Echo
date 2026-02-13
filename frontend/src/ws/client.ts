@@ -96,6 +96,9 @@ class WebSocketClient {
       case 'message_new':
         this.handleNewMessage(data);
         break;
+      case 'message_update':
+        this.emit('message_update', data.message);
+        break;
       case 'read_update':
         this.handleReadUpdate(data);
         break;
@@ -115,7 +118,12 @@ class WebSocketClient {
     const { message } = data;
     const chatStore = useChatStore.getState();
 
-    console.log('📩 New message received:', message.id);
+    console.log('📩 New message received:', {
+      id: message.id,
+      type: message.message_type,
+      is_one_time: message.is_one_time,
+      viewed_at: message.viewed_at
+    });
 
     // Add message to store
     chatStore.addMessage(message);
@@ -187,7 +195,15 @@ class WebSocketClient {
     }
   }
 
-  sendMessage(conversationId: string, messageType: 'text' | 'image', content: string): boolean {
+  sendMessage(
+    conversationId: string,
+    messageType: 'text' | 'image',
+    content: string,
+    options?: {
+      is_one_time?: boolean;
+      expires_in?: number | null;
+    }
+  ): boolean {
     const data: any = {
       type: 'message_send',
       conversation_id: conversationId,
@@ -198,6 +214,14 @@ class WebSocketClient {
       data.text = content;
     } else {
       data.media_url = content;
+    }
+
+    // Add optional flags
+    if (options?.is_one_time) {
+      data.is_one_time = true;
+    }
+    if (options?.expires_in) {
+      data.expires_in = options.expires_in;
     }
 
     return this.send(data);

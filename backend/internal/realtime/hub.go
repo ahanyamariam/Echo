@@ -8,8 +8,8 @@ import (
 
 // Hub maintains the set of active clients and broadcasts messages
 type Hub struct {
-	// Registered clients mapped by user ID
-	clients map[string]*Client
+	// Registered clients mapped by user ID, then by client pointer for uniqueness
+	clients map[string]map[*Client]bool
 
 	// Inbound messages from clients to broadcast
 	broadcast chan *BroadcastMessage
@@ -33,7 +33,7 @@ type BroadcastMessage struct {
 // NewHub creates a new Hub instance
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[string]*Client),
+		clients:    make(map[string]map[*Client]bool),
 		broadcast:  make(chan *BroadcastMessage, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -46,22 +46,25 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
-			// Close existing connection if user reconnects
-			if existingClient, ok := h.clients[client.UserID]; ok {
-				close(existingClient.send)
-				delete(h.clients, client.UserID)
+			if _, ok := h.clients[client.UserID]; !ok {
+				h.clients[client.UserID] = make(map[*Client]bool)
 			}
-			h.clients[client.UserID] = client
+			h.clients[client.UserID][client] = true
 			h.mu.Unlock()
-			log.Printf("Client registered: %s (%s)", client.Username, client.UserID)
+			log.Printf("Client registered: %s (%s). Total connections for user: %d",
+				client.Username, client.UserID, len(h.clients[client.UserID]))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if existingClient, ok := h.clients[client.UserID]; ok {
-				if existingClient == client {
-					delete(h.clients, client.UserID)
+			if userClients, ok := h.clients[client.UserID]; ok {
+				if _, exists := userClients[client]; exists {
+					delete(userClients, client)
 					close(client.send)
-					log.Printf("Client unregistered: %s (%s)", client.Username, client.UserID)
+					if len(userClients) == 0 {
+						delete(h.clients, client.UserID)
+					}
+					log.Printf("Client unregistered: %s (%s). Remaining connections: %d",
+						client.Username, client.UserID, len(userClients))
 				}
 			}
 			h.mu.Unlock()
@@ -69,12 +72,14 @@ func (h *Hub) Run() {
 		case message := <-h.broadcast:
 			h.mu.RLock()
 			for _, userID := range message.UserIDs {
-				if client, ok := h.clients[userID]; ok {
-					select {
-					case client.send <- message.Data:
-					default:
-						// Client's send buffer is full, skip
-						log.Printf("Client %s send buffer full, skipping message", userID)
+				if userClients, ok := h.clients[userID]; ok {
+					for client := range userClients {
+						select {
+						case client.send <- message.Data:
+						default:
+							// Client's send buffer is full, handle if needed
+							log.Printf("Client %s send buffer full, skipping message", userID)
+						}
 					}
 				}
 			}
@@ -102,8 +107,8 @@ func (h *Hub) BroadcastToUsers(userIDs []string, data interface{}) error {
 func (h *Hub) IsUserOnline(userID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	_, ok := h.clients[userID]
-	return ok
+	userClients, ok := h.clients[userID]
+	return ok && len(userClients) > 0
 }
 
 // GetOnlineUsers returns a list of online user IDs from the given list
@@ -113,7 +118,7 @@ func (h *Hub) GetOnlineUsers(userIDs []string) []string {
 
 	online := make([]string, 0)
 	for _, userID := range userIDs {
-		if _, ok := h.clients[userID]; ok {
+		if userClients, ok := h.clients[userID]; ok && len(userClients) > 0 {
 			online = append(online, userID)
 		}
 	}
