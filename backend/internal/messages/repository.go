@@ -19,6 +19,8 @@ type Message struct {
 	MediaURL       *string
 	CreatedAt      time.Time
 	ExpiresAt      *time.Time
+	IsOneTime      bool
+	ViewedAt       *time.Time
 }
 
 type Repository struct {
@@ -36,7 +38,7 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 
 	if before == "" {
 		query = `
-			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at
+			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
 			FROM messages
 			WHERE conversation_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
 			ORDER BY created_at DESC
@@ -45,7 +47,7 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 		args = []interface{}{conversationID, limit + 1}
 	} else {
 		query = `
-			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at
+			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
 			FROM messages
 			WHERE conversation_id = $1 
 			  AND (expires_at IS NULL OR expires_at > NOW())
@@ -74,6 +76,8 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 			&msg.MediaURL,
 			&msg.CreatedAt,
 			&msg.ExpiresAt,
+			&msg.IsOneTime,
+			&msg.ViewedAt,
 		)
 		if err != nil {
 			return nil, false, err
@@ -99,13 +103,13 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 }
 
 // Create creates a new message
-func (r *Repository) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time) (*Message, error) {
+func (r *Repository) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time, isOneTime bool) (*Message, error) {
 	var msg Message
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO messages (conversation_id, sender_id, message_type, text, media_url, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at
-	`, conversationID, senderID, messageType, text, mediaURL, expiresAt).Scan(
+		INSERT INTO messages (conversation_id, sender_id, message_type, text, media_url, expires_at, is_one_time)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
+	`, conversationID, senderID, messageType, text, mediaURL, expiresAt, isOneTime).Scan(
 		&msg.ID,
 		&msg.ConversationID,
 		&msg.SenderID,
@@ -114,6 +118,8 @@ func (r *Repository) Create(ctx context.Context, conversationID, senderID, messa
 		&msg.MediaURL,
 		&msg.CreatedAt,
 		&msg.ExpiresAt,
+		&msg.IsOneTime,
+		&msg.ViewedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -125,7 +131,7 @@ func (r *Repository) Create(ctx context.Context, conversationID, senderID, messa
 func (r *Repository) GetByID(ctx context.Context, id string) (*Message, error) {
 	var msg Message
 	err := r.db.QueryRow(ctx, `
-		SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at
+		SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
 		FROM messages WHERE id = $1
 	`, id).Scan(
 		&msg.ID,
@@ -136,6 +142,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Message, error) {
 		&msg.MediaURL,
 		&msg.CreatedAt,
 		&msg.ExpiresAt,
+		&msg.IsOneTime,
+		&msg.ViewedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -144,6 +152,18 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Message, error) {
 		return nil, err
 	}
 	return &msg, nil
+}
+
+// MarkAsViewed marks a view-once message as viewed
+func (r *Repository) MarkAsViewed(ctx context.Context, messageID string) error {
+	result, err := r.db.Exec(ctx, "UPDATE messages SET viewed_at = NOW() WHERE id = $1 AND is_one_time = TRUE AND viewed_at IS NULL", messageID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return errors.New("message not found or already viewed")
+	}
+	return nil
 }
 
 // DeleteExpiredMessages removes messages that have expired

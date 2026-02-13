@@ -22,6 +22,7 @@ import (
 	"github.com/ahanyamariam/echo/internal/messages"
 	"github.com/ahanyamariam/echo/internal/middleware"
 	"github.com/ahanyamariam/echo/internal/realtime"
+	"github.com/ahanyamariam/echo/internal/uploads"
 	"github.com/ahanyamariam/echo/internal/users"
 )
 
@@ -65,7 +66,8 @@ func main() {
 	authHandler := auth.NewHandler(authService)
 	usersHandler := users.NewHandler(usersService)
 	convsHandler := conversations.NewHandler(convsService)
-	msgsHandler := messages.NewHandler(msgsService)
+	msgsHandler := messages.NewHandler(msgsService, convsService, hub)
+	uploadsHandler := uploads.NewHandler(cfg.UploadDir)
 	wsHandler := realtime.NewHandler(hub, authService, msgsService, convsService)
 
 	// Setup router
@@ -80,12 +82,12 @@ func main() {
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},  // Allow all origins
+		AllowedOrigins:   []string{"*"}, // Allow all origins
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-        AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-        AllowCredentials: false,
-        MaxAge:           300,
-}))
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +122,13 @@ func main() {
 		})
 
 		// Messages
-		r.Get("/messages", msgsHandler.List)
+		r.Route("/messages", func(r chi.Router) {
+			r.Get("/", msgsHandler.List)
+			r.Post("/{id}/view", msgsHandler.MarkAsViewed)
+		})
+
+		// Uploads
+		r.Post("/uploads", uploadsHandler.Upload)
 	})
 
 	// Serve uploaded files

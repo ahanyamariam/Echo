@@ -18,6 +18,7 @@ interface ChatState {
   setMessages: (conversationId: string, messages: Message[]) => void;
   prependMessages: (conversationId: string, messages: Message[]) => void;
   addMessage: (message: Message) => void;
+  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   setHasMore: (conversationId: string, hasMore: boolean) => void;
   removeExpiredMessages: (conversationId: string) => void;
 
@@ -135,6 +136,22 @@ export const useChatStore = create<ChatState>((set) => ({
         messages: {
           ...state.messages,
           [conversationId]: [...existingMessages, message],
+        },
+      };
+    });
+  },
+
+  updateMessage: (conversationId, messageId, updates) => {
+    set((state) => {
+      const existingMessages = state.messages[conversationId] || [];
+      const updatedMessages = existingMessages.map((m) =>
+        m.id === messageId ? { ...m, ...updates } : m
+      );
+
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: updatedMessages,
         },
       };
     });
