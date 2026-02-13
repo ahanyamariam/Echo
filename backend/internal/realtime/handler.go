@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/ahanyamariam/echo/internal/auth"
 	"github.com/ahanyamariam/echo/internal/conversations"
@@ -47,6 +48,8 @@ type WSMessageSend struct {
 	MessageType    string `json:"message_type"`
 	Text           string `json:"text,omitempty"`
 	MediaURL       string `json:"media_url,omitempty"`
+	IsOneTime      bool   `json:"is_one_time,omitempty"`
+	ExpiresIn      *int64 `json:"expires_in,omitempty"`
 }
 
 type WSMessageNew struct {
@@ -63,6 +66,8 @@ type MessagePayload struct {
 	MediaURL       *string `json:"media_url,omitempty"`
 	CreatedAt      string  `json:"created_at"`
 	ExpiresAt      *string `json:"expires_at,omitempty"`
+	IsOneTime      bool    `json:"is_one_time"`
+	ViewedAt       *string `json:"viewed_at,omitempty"`
 }
 
 type WSError struct {
@@ -101,7 +106,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.hub.register <- client
 
 	go client.WritePump()
-	go client.ReadPump()
+	client.ReadPump()
 }
 
 func (h *Handler) handleMessage(client *Client, data []byte) {
@@ -155,8 +160,14 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 		mediaURLPtr = &msg.MediaURL
 	}
 
+	var expiresAt *time.Time
+	if msg.ExpiresIn != nil {
+		t := time.Now().Add(time.Duration(*msg.ExpiresIn) * time.Second)
+		expiresAt = &t
+	}
+
 	ctx := context.Background()
-	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr)
+	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr, expiresAt, msg.IsOneTime)
 	if err != nil {
 		if err.Error() == "not a member" {
 			h.sendError(client, "Not a member of this conversation")
@@ -191,6 +202,8 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 			MediaURL:       message.MediaURL,
 			CreatedAt:      message.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			ExpiresAt:      expiresAtStr,
+			IsOneTime:      message.IsOneTime,
+			ViewedAt:       nil, // New messages are not viewed yet
 		},
 	}
 

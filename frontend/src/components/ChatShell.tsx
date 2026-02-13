@@ -13,6 +13,7 @@ const ChatShell: React.FC = () => {
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const setConversations = useChatStore((state) => state.setConversations);
   const setConversationsLoading = useChatStore((state) => state.setConversationsLoading);
+  const updateMessage = useChatStore((state) => state.updateMessage);
   const resetChat = useChatStore((state) => state.reset);
 
   const isConnected = useWSStore((state) => state.isConnected);
@@ -32,9 +33,17 @@ const ChatShell: React.FC = () => {
       console.log('WebSocket disconnected - updating state');
       setConnected(false);
     };
+    const handleMessageUpdate = (updatedMessage: any) => {
+      console.log('WebSocket message_update received:', updatedMessage);
+      updateMessage(updatedMessage.conversation_id, updatedMessage.id, {
+        viewed_at: updatedMessage.viewed_at,
+        is_one_time: updatedMessage.is_one_time
+      });
+    };
 
     wsClient.on('connected', handleConnected);
     wsClient.on('disconnected', handleDisconnected);
+    wsClient.on('message_update', handleMessageUpdate);
 
     // THEN connect
     wsClient.connect();
@@ -47,6 +56,7 @@ const ChatShell: React.FC = () => {
     return () => {
       wsClient.off('connected', handleConnected);
       wsClient.off('disconnected', handleDisconnected);
+      wsClient.off('message_update', handleMessageUpdate);
       wsClient.disconnect();
       resetChat();
       resetWS();
