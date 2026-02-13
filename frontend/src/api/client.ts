@@ -44,6 +44,9 @@ class ApiClient {
         const response = await fetch(url, config);
 
         if (!response.ok) {
+            if (response.status === 401) {
+                window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            }
             const error = await response.json().catch(() => ({ error: 'Unknown error' }));
             throw new Error(error.error || `HTTP error! status: ${response.status}`);
         }

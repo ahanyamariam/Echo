@@ -40,7 +40,7 @@ const initialState = {
   messagesLoading: false,
 };
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set) => ({
   ...initialState,
 
   setConversations: (conversations) => {
