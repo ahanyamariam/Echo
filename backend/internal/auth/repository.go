@@ -21,9 +21,9 @@ func (r *Repository) CreateUser(ctx context.Context, username, email, passwordHa
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO users (username, email, password_hash)
 		 VALUES ($1, $2, $3)
-		 RETURNING id, username, email, password_hash, created_at`,
+		 RETURNING id, username, email, password_hash, display_name, avatar_url, created_at`,
 		username, email, passwordHash,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -35,10 +35,10 @@ func (r *Repository) CreateUser(ctx context.Context, username, email, passwordHa
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, created_at
+		`SELECT id, username, email, password_hash, display_name, avatar_url, created_at
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -53,10 +53,10 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 func (r *Repository) GetUserByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, created_at
+		`SELECT id, username, email, password_hash, display_name, avatar_url, created_at
 		 FROM users WHERE id = $1`,
 		id,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

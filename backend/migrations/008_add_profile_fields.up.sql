@@ -1,0 +1,18 @@
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS display_name VARCHAR(100),
+ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500),
+ADD COLUMN IF NOT EXISTS bio VARCHAR(500),
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    show_email BOOLEAN DEFAULT FALSE,
+    show_avatar BOOLEAN DEFAULT TRUE,
+    show_online_status BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id);
+
+UPDATE users SET display_name = username WHERE display_name IS NULL;

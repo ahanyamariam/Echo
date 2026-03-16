@@ -23,6 +23,8 @@ type ConversationWithDetails struct {
 	CreatedAt                    time.Time
 	OtherUserID                  string
 	OtherUsername                string
+	OtherUserDisplayName         *string
+	OtherUserAvatarURL           *string
 	LastMessageID                *string
 	LastMessageType              *string
 	LastMessageText              *string
@@ -42,10 +44,12 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*Convers
 			WHERE cm.user_id = $1 AND c.type = 'dm'
 		),
 		other_users AS (
-			SELECT uc.id as conversation_id, u.id as user_id, u.username
+			SELECT uc.id as conversation_id, u.id as user_id, u.username, u.display_name,
+				CASE WHEN COALESCE(s.show_avatar, true) THEN u.avatar_url ELSE NULL END as avatar_url
 			FROM user_conversations uc
 			JOIN conversation_members cm ON uc.id = cm.conversation_id
 			JOIN users u ON cm.user_id = u.id
+			LEFT JOIN user_settings s ON u.id = s.user_id
 			WHERE cm.user_id != $1
 		),
 		last_messages AS (
@@ -82,6 +86,8 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*Convers
 			uc.created_at,
 			ou.user_id,
 			ou.username,
+			ou.display_name,
+			ou.avatar_url,
 			lm.id,
 			lm.message_type,
 			lm.text,
@@ -113,6 +119,8 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*Convers
 			&conv.CreatedAt,
 			&conv.OtherUserID,
 			&conv.OtherUsername,
+			&conv.OtherUserDisplayName,
+			&conv.OtherUserAvatarURL,
 			&conv.LastMessageID,
 			&conv.LastMessageType,
 			&conv.LastMessageText,
@@ -137,11 +145,13 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*Convers
 
 func (r *Repository) FindDMBetweenUsers(ctx context.Context, userID1, userID2 string) (*ConversationWithDetails, error) {
 	query := `
-		SELECT c.id, c.type, c.created_at, u.id, u.username
+		SELECT c.id, c.type, c.created_at, u.id, u.username, u.display_name,
+			CASE WHEN COALESCE(s.show_avatar, true) THEN u.avatar_url ELSE NULL END as avatar_url
 		FROM conversations c
 		JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
 		JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = $2
 		JOIN users u ON u.id = $2
+		LEFT JOIN user_settings s ON u.id = s.user_id
 		WHERE c.type = 'dm'
 		LIMIT 1
 	`
@@ -153,6 +163,8 @@ func (r *Repository) FindDMBetweenUsers(ctx context.Context, userID1, userID2 st
 		&conv.CreatedAt,
 		&conv.OtherUserID,
 		&conv.OtherUsername,
+		&conv.OtherUserDisplayName,
+		&conv.OtherUserAvatarURL,
 	)
 
 	if err != nil {
@@ -174,7 +186,15 @@ func (r *Repository) CreateDM(ctx context.Context, userID, otherUserID string) (
 
 	// Verify other user exists
 	var otherUsername string
-	err = tx.QueryRow(ctx, "SELECT username FROM users WHERE id = $1", otherUserID).Scan(&otherUsername)
+	var otherUserDisplayName *string
+	var otherUserAvatarURL *string
+	err = tx.QueryRow(ctx,
+		`SELECT u.username, u.display_name,
+			CASE WHEN COALESCE(s.show_avatar, true) THEN u.avatar_url ELSE NULL END as avatar_url
+		FROM users u
+		LEFT JOIN user_settings s ON u.id = s.user_id
+		WHERE u.id = $1`,
+		otherUserID).Scan(&otherUsername, &otherUserDisplayName, &otherUserAvatarURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("user not found")
@@ -207,6 +227,8 @@ func (r *Repository) CreateDM(ctx context.Context, userID, otherUserID string) (
 
 	conv.OtherUserID = otherUserID
 	conv.OtherUsername = otherUsername
+	conv.OtherUserDisplayName = otherUserDisplayName
+	conv.OtherUserAvatarURL = otherUserAvatarURL
 
 	return &conv, nil
 }

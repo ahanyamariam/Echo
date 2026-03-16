@@ -3,6 +3,7 @@ import { usersApi } from '../api/users';
 import { conversationsApi } from '../api/conversations';
 import { useChatStore } from '../store/chatStore';
 import type { User } from '../types';
+import UserProfileModal from './UserProfileModal';
 
 interface UserSearchProps {
   onClose: () => void;
@@ -15,6 +16,7 @@ const UserSearch: React.FC<UserSearchProps> = ({ onClose, onConversationCreated 
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
 
@@ -48,7 +50,6 @@ const UserSearch: React.FC<UserSearchProps> = ({ onClose, onConversationCreated 
     const value = e.target.value;
     setQuery(value);
 
-    // Debounce search
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -74,6 +75,8 @@ const UserSearch: React.FC<UserSearchProps> = ({ onClose, onConversationCreated 
     }
   };
 
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
   const getAvatarColor = (username: string) => {
     const colors = [
       'from-green-500 to-teal-600',
@@ -85,76 +88,104 @@ const UserSearch: React.FC<UserSearchProps> = ({ onClose, onConversationCreated 
     return colors[index];
   };
 
+  const handleAvatarClick = (e: React.MouseEvent, userId: string) => {
+    e.stopPropagation();
+    setProfileUserId(userId);
+  };
+
   return (
-    <div className="border-b border-gray-700 bg-gray-800">
-      {/* Search Input */}
-      <div className="p-3 pb-2 flex gap-2">
-        <div className="relative flex-1">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={handleQueryChange}
-            placeholder="Search users..."
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <>
+      <div className="border-b border-gray-700 bg-gray-800">
+        {/* Search Input */}
+        <div className="p-3 pb-2 flex gap-2">
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={handleQueryChange}
+              placeholder="Search users..."
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+            Cancel
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
-        >
-          Cancel
-        </button>
+
+        {/* Error Message */}
+        {error && (
+          <div className="px-3 pb-2">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Results */}
+        <div className="max-h-64 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            </div>
+          ) : results.length > 0 ? (
+            <div className="pb-2">
+              {results.map((user) => (
+                <button
+                  key={user.id}
+                  onClick={() => handleSelectUser(user)}
+                  disabled={creating}
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-gray-700 disabled:opacity-50 transition"
+                >
+                  <div
+                    onClick={(e) => handleAvatarClick(e, user.id)}
+                    className="flex-shrink-0 cursor-pointer hover:opacity-80 transition"
+                    title={`View ${user.display_name || user.username}'s profile`}
+                  >
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url.startsWith('http') ? user.avatar_url : `${API_URL}${user.avatar_url}`} alt={user.username} className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(user.username)} flex items-center justify-center text-white font-bold`}>
+                        {(user.display_name || user.username).charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="font-medium">{user.display_name || user.username}</span>
+                    {user.display_name && <span className="text-xs text-gray-400">@{user.username}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : query.length >= 2 ? (
+            <div className="py-6 text-center text-gray-400">
+              <p>No users found</p>
+            </div>
+          ) : query.length > 0 ? (
+            <div className="py-6 text-center text-gray-400">
+              <p className="text-sm">Type at least 2 characters to search</p>
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="px-3 pb-2">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+      {/* Profile Modal */}
+      {profileUserId && (
+        <UserProfileModal
+          userId={profileUserId}
+          onClose={() => setProfileUserId(null)}
+        />
       )}
-
-      {/* Results */}
-      <div className="max-h-64 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-6">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-          </div>
-        ) : results.length > 0 ? (
-          <div className="pb-2">
-            {results.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => handleSelectUser(user)}
-                disabled={creating}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-gray-700 disabled:opacity-50 transition"
-              >
-                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(user.username)} flex items-center justify-center text-white font-bold flex-shrink-0`}>
-                  {user.username.charAt(0).toUpperCase()}
-                </div>
-                <span className="font-medium">{user.username}</span>
-              </button>
-            ))}
-          </div>
-        ) : query.length >= 2 ? (
-          <div className="py-6 text-center text-gray-400">
-            <p>No users found</p>
-          </div>
-        ) : query.length > 0 ? (
-          <div className="py-6 text-center text-gray-400">
-            <p className="text-sm">Type at least 2 characters to search</p>
-          </div>
-        ) : null}
-      </div>
-    </div>
+    </>
   );
 };
 

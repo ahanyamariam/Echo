@@ -32,10 +32,12 @@ type AuthResponse struct {
 }
 
 type UserResponse struct {
-	ID        string `json:"id"`
-	Username  string `json:"username"`
-	Email     string `json:"email"`
-	CreatedAt string `json:"created_at"`
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	Email       string  `json:"email"`
+	DisplayName *string `json:"display_name,omitempty"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
@@ -73,10 +75,12 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 	common.Success(w, http.StatusCreated, AuthResponse{
 		User: &UserResponse{
-			ID:        user.ID,
-			Username:  user.Username,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:          user.ID,
+			Username:    user.Username,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			AvatarURL:   user.AvatarURL,
+			CreatedAt:   user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
 		Token: token,
 	})
@@ -107,10 +111,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	common.Success(w, http.StatusOK, AuthResponse{
 		User: &UserResponse{
-			ID:        user.ID,
-			Username:  user.Username,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:          user.ID,
+			Username:    user.Username,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			AvatarURL:   user.AvatarURL,
+			CreatedAt:   user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
 		Token: token,
 	})

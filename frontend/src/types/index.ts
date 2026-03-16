@@ -2,6 +2,8 @@ export interface User {
   id: string;
   username: string;
   email?: string;
+  display_name?: string;
+  avatar_url?: string;
   created_at?: string;
 }
 

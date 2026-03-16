@@ -2,13 +2,17 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { messagesApi } from '../api/messages';
+import { getUserProfile } from '../api/profile';
 import { wsClient } from '../ws/client';
 import MessageList from './MessageList';
 import Composer from './Composer';
 import DisappearingMessagesToggle from './DisappearingMessagesToggle';
+import UserProfileModal from './UserProfileModal';
 
 const ChatView: React.FC = () => {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
   const [loadingMore, setLoadingMore] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialLoadRef = useRef(true);
@@ -31,6 +35,7 @@ const ChatView: React.FC = () => {
   const setMessagesLoading = useChatStore((state) => state.setMessagesLoading);
   const resetUnreadCount = useChatStore((state) => state.resetUnreadCount);
   const removeExpiredMessages = useChatStore((state) => state.removeExpiredMessages);
+  const updateConversationUser = useChatStore((state) => state.updateConversationUser);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
@@ -41,6 +46,20 @@ const ChatView: React.FC = () => {
       prevMessagesLengthRef.current = 0;
       loadMessages();
       resetUnreadCount(activeConversationId);
+    }
+  }, [activeConversationId]);
+
+  // Refresh other user's profile data when conversation is opened
+  useEffect(() => {
+    if (activeConversation?.other_user?.id) {
+      getUserProfile(activeConversation.other_user.id)
+        .then((profile) => {
+          updateConversationUser(profile.id, {
+            display_name: profile.display_name,
+            avatar_url: profile.avatar_url,
+          });
+        })
+        .catch(() => {});
     }
   }, [activeConversationId]);
 
@@ -154,16 +173,24 @@ const ChatView: React.FC = () => {
       {/* Header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-gray-700 bg-gray-800">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(
-                activeConversation.other_user.username
-              )} flex items-center justify-center text-white font-bold`}
-            >
-              {activeConversation.other_user.username.charAt(0).toUpperCase()}
-            </div>
+          <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition" onClick={() => setShowProfile(true)}>
+            {activeConversation.other_user.avatar_url ? (
+              <img
+                src={activeConversation.other_user.avatar_url.startsWith('http') ? activeConversation.other_user.avatar_url : `${API_URL}${activeConversation.other_user.avatar_url}`}
+                alt={activeConversation.other_user.username}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(
+                  activeConversation.other_user.username
+                )} flex items-center justify-center text-white font-bold`}
+              >
+                {(activeConversation.other_user.display_name || activeConversation.other_user.username).charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
-              <h2 className="font-semibold">{activeConversation.other_user.username}</h2>
+              <h2 className="font-semibold">{activeConversation.other_user.display_name || activeConversation.other_user.username}</h2>
               {activeConversation.disappearing_messages?.enabled && (
                 <p className="text-xs text-purple-400 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,6 +247,14 @@ const ChatView: React.FC = () => {
 
       {/* Composer */}
       <Composer conversationId={activeConversationId!} onMessageSent={() => scrollToBottom()} />
+
+      {/* User Profile Modal */}
+      {showProfile && (
+        <UserProfileModal
+          userId={activeConversation.other_user.id}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
     </div>
   );
 };

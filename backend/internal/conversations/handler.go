@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ahanyamariam/echo/internal/common"
 	"github.com/ahanyamariam/echo/internal/middleware"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -27,8 +27,10 @@ type UpdateDisappearingRequest struct {
 }
 
 type OtherUserResponse struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName *string `json:"display_name,omitempty"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
 }
 
 type LastMessageResponse struct {
@@ -45,12 +47,12 @@ type DisappearingMessagesResponse struct {
 }
 
 type ConversationResponse struct {
-	ID                  string                        `json:"id"`
-	Type                string                        `json:"type"`
-	CreatedAt           string                        `json:"created_at"`
-	OtherUser           OtherUserResponse             `json:"other_user"`
-	LastMessage         *LastMessageResponse          `json:"last_message,omitempty"`
-	UnreadCount         int                           `json:"unread_count"`
+	ID                   string                       `json:"id"`
+	Type                 string                       `json:"type"`
+	CreatedAt            string                       `json:"created_at"`
+	OtherUser            OtherUserResponse            `json:"other_user"`
+	LastMessage          *LastMessageResponse         `json:"last_message,omitempty"`
+	UnreadCount          int                          `json:"unread_count"`
 	DisappearingMessages DisappearingMessagesResponse `json:"disappearing_messages"`
 }
 
@@ -83,8 +85,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			Type:      conv.Type,
 			CreatedAt: conv.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			OtherUser: OtherUserResponse{
-				ID:       conv.OtherUserID,
-				Username: conv.OtherUsername,
+				ID:          conv.OtherUserID,
+				Username:    conv.OtherUsername,
+				DisplayName: conv.OtherUserDisplayName,
+				AvatarURL:   conv.OtherUserAvatarURL,
 			},
 			UnreadCount: conv.UnreadCount,
 			DisappearingMessages: DisappearingMessagesResponse{
@@ -155,8 +159,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			Type:      conv.Type,
 			CreatedAt: conv.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			OtherUser: OtherUserResponse{
-				ID:       conv.OtherUserID,
-				Username: conv.OtherUsername,
+				ID:          conv.OtherUserID,
+				Username:    conv.OtherUsername,
+				DisplayName: conv.OtherUserDisplayName,
+				AvatarURL:   conv.OtherUserAvatarURL,
 			},
 			UnreadCount: 0,
 			DisappearingMessages: DisappearingMessagesResponse{

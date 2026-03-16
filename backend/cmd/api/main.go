@@ -21,6 +21,7 @@ import (
 	"github.com/ahanyamariam/echo/internal/jobs"
 	"github.com/ahanyamariam/echo/internal/messages"
 	"github.com/ahanyamariam/echo/internal/middleware"
+	"github.com/ahanyamariam/echo/internal/profile"
 	"github.com/ahanyamariam/echo/internal/realtime"
 	"github.com/ahanyamariam/echo/internal/uploads"
 	"github.com/ahanyamariam/echo/internal/users"
@@ -45,12 +46,14 @@ func main() {
 	usersRepo := users.NewRepository(pool)
 	convsRepo := conversations.NewRepository(pool)
 	msgsRepo := messages.NewRepository(pool)
+	profileRepo := profile.NewRepository(pool)
 
 	// Initialize services
 	authService := auth.NewService(authRepo, cfg.JWTSecret, cfg.JWTExpiry)
 	usersService := users.NewService(usersRepo)
 	convsService := conversations.NewService(convsRepo)
 	msgsService := messages.NewService(msgsRepo, convsRepo)
+	profileService := profile.NewService(profileRepo, cfg.UploadDir)
 
 	// Initialize WebSocket hub
 	hub := realtime.NewHub()
@@ -68,6 +71,7 @@ func main() {
 	convsHandler := conversations.NewHandler(convsService)
 	msgsHandler := messages.NewHandler(msgsService, convsService, hub)
 	uploadsHandler := uploads.NewHandler(cfg.UploadDir)
+	profileHandler := profile.NewHandler(profileService)
 	wsHandler := realtime.NewHandler(hub, authService, msgsService, convsService)
 
 	// Setup router
@@ -82,7 +86,7 @@ func main() {
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"}, // Allow all origins
+		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: false,
@@ -112,6 +116,15 @@ func main() {
 		r.Route("/users", func(r chi.Router) {
 			r.Get("/me", usersHandler.GetMe)
 			r.Get("/search", usersHandler.Search)
+
+			// Profile routes
+			r.Get("/me/profile", profileHandler.GetMyProfile)
+			r.Patch("/me/profile", profileHandler.UpdateProfile)
+			r.Post("/me/avatar", profileHandler.UploadAvatar)
+			r.Delete("/me/avatar", profileHandler.RemoveAvatar)
+			r.Get("/me/settings", profileHandler.GetSettings)
+			r.Patch("/me/settings", profileHandler.UpdateSettings)
+			r.Get("/{id}/profile", profileHandler.GetUserProfile)
 		})
 
 		// Conversations
@@ -131,9 +144,13 @@ func main() {
 		r.Post("/uploads", uploadsHandler.Upload)
 	})
 
-	// Serve uploaded files
+	// Serve uploaded files (including avatars)
 	if err := os.MkdirAll(cfg.UploadDir, 0755); err != nil {
 		log.Fatalf("Failed to create upload directory: %v", err)
+	}
+	// Create avatars subdirectory
+	if err := os.MkdirAll(cfg.UploadDir+"/avatars", 0755); err != nil {
+		log.Fatalf("Failed to create avatars directory: %v", err)
 	}
 	fileServer := http.FileServer(http.Dir(cfg.UploadDir))
 	r.Handle("/uploads/*", http.StripPrefix("/uploads/", fileServer))
@@ -171,5 +188,4 @@ func main() {
 	}
 
 	log.Println("Server exited properly")
-
 }

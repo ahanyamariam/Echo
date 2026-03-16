@@ -19,6 +19,8 @@ type User struct {
 	Username     string
 	Email        string
 	PasswordHash string
+	DisplayName  *string
+	AvatarURL    *string
 	CreatedAt    time.Time
 }
 

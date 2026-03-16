@@ -19,10 +19,10 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, username, email, created_at
+		`SELECT id, username, email, display_name, avatar_url, created_at
 		 FROM users WHERE id = $1`,
 		id,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.AvatarURL, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -36,10 +36,10 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
 
 func (r *Repository) Search(ctx context.Context, query string, excludeUserID string, limit int) ([]*User, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, username, email, created_at
+		`SELECT id, username, email, display_name, avatar_url, created_at
 		 FROM users
 		 WHERE id != $1
-		 AND username ILIKE $2
+		 AND (username ILIKE $2 OR display_name ILIKE $2)
 		 ORDER BY 
 		   CASE WHEN username ILIKE $3 THEN 0 ELSE 1 END,
 		   username
@@ -57,7 +57,7 @@ func (r *Repository) Search(ctx context.Context, query string, excludeUserID str
 	var users []*User
 	for rows.Next() {
 		var user User
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.DisplayName, &user.AvatarURL, &user.CreatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, &user)

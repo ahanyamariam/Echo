@@ -5,6 +5,8 @@ import Signup from './pages/Signup';
 import Chat from './pages/Chat';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
+import ProfilePage from './pages/ProfilePage';
+
 
 function App() {
     const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -40,6 +42,14 @@ function App() {
                 />
                 <Route path="/" element={<Navigate to="/chat" replace />} />
                 <Route path="*" element={<Navigate to="/chat" replace />} />
+                <Route
+                    path="/profile"
+                    element={
+                        <ProtectedRoute>
+                            <ProfilePage />
+                        </ProtectedRoute>
+                    }
+                />
             </Routes>
         </BrowserRouter>
     );

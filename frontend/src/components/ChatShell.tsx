@@ -1,18 +1,22 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useWSStore } from '../ws/wsStore';
 import { conversationsApi } from '../api/conversations';
+import { getUserProfile } from '../api/profile';
 import { wsClient } from '../ws/client';
 import ConversationList from './ConversationList';
 import ChatView from './ChatView';
 
 const ChatShell: React.FC = () => {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const setConversations = useChatStore((state) => state.setConversations);
   const setConversationsLoading = useChatStore((state) => state.setConversationsLoading);
+  const updateConversationUser = useChatStore((state) => state.updateConversationUser);
   const updateMessage = useChatStore((state) => state.updateMessage);
   const resetChat = useChatStore((state) => state.reset);
 
@@ -68,18 +72,26 @@ const ChatShell: React.FC = () => {
     try {
       const conversations = await conversationsApi.list();
       setConversations(conversations);
+
+      // Fetch fresh profile data for each other user to ensure
+      // display names, avatars, and bios are up to date
+      const uniqueUserIds = [...new Set(conversations.map(c => c.other_user.id))];
+      uniqueUserIds.forEach(async (userId) => {
+        try {
+          const profile = await getUserProfile(userId);
+          updateConversationUser(userId, {
+            display_name: profile.display_name,
+            avatar_url: profile.avatar_url,
+          });
+        } catch {
+          // Silently ignore - conversation data is still usable
+        }
+      });
     } catch (error) {
       console.error('Failed to load conversations:', error);
     } finally {
       setConversationsLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    wsClient.disconnect();
-    resetChat();
-    resetWS();
-    logout();
   };
 
   return (
@@ -89,10 +101,15 @@ const ChatShell: React.FC = () => {
         {/* Header */}
         <div className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold">
-                {user?.username?.charAt(0).toUpperCase()}
-              </div>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/profile')}>
+              {/* User Avatar */}
+              {user?.avatar_url ? (
+                <img src={user.avatar_url.startsWith('http') ? user.avatar_url : `${API_URL}${user.avatar_url}`} alt={user.username} className="w-10 h-10 rounded-full object-cover" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold">
+                  {(user?.display_name || user?.username || '?').charAt(0).toUpperCase()}
+                </div>
+              )}
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-lg font-bold text-blue-400">Echo</h1>
@@ -103,16 +120,23 @@ const ChatShell: React.FC = () => {
                     title={isConnected ? 'Connected' : 'Disconnected'}
                   />
                 </div>
-                <p className="text-sm text-gray-400">{user?.username}</p>
+                <p className="text-sm text-gray-400">{user?.display_name || user?.username}</p>
               </div>
             </div>
+
+            {/* Profile Button (replaces logout) */}
             <button
-              onClick={handleLogout}
+              onClick={() => navigate('/profile')}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
-              title="Logout"
+              title="Profile & Settings"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
               </svg>
             </button>
           </div>

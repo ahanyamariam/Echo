@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Conversation, Message, DisappearingMessages } from '../types';
+import type { Conversation, Message, DisappearingMessages, User } from '../types';
 
 interface ChatState {
   conversations: Conversation[];
@@ -14,6 +14,7 @@ interface ChatState {
   setActiveConversation: (id: string | null) => void;
   updateConversationLastMessage: (message: Message) => void;
   updateConversationDisappearing: (conversationId: string, settings: DisappearingMessages) => void;
+  updateConversationUser: (userId: string, data: Partial<User>) => void;
 
   setMessages: (conversationId: string, messages: Message[]) => void;
   prependMessages: (conversationId: string, messages: Message[]) => void;
@@ -100,6 +101,16 @@ export const useChatStore = create<ChatState>((set) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
           ? { ...conv, disappearing_messages: settings }
+          : conv
+      ),
+    }));
+  },
+
+  updateConversationUser: (userId, data) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.other_user.id === userId
+          ? { ...conv, other_user: { ...conv.other_user, ...data } }
           : conv
       ),
     }));

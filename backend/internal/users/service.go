@@ -6,10 +6,12 @@ import (
 )
 
 type User struct {
-	ID        string
-	Username  string
-	Email     string
-	CreatedAt time.Time
+	ID          string
+	Username    string
+	Email       string
+	DisplayName *string
+	AvatarURL   *string
+	CreatedAt   time.Time
 }
 
 type Service struct {

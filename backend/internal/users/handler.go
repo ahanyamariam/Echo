@@ -16,9 +16,11 @@ func NewHandler(service *Service) *Handler {
 }
 
 type UserResponse struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email,omitempty"`
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	Email       string  `json:"email,omitempty"`
+	DisplayName *string `json:"display_name,omitempty"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
 }
 
 type SearchResponse struct {
@@ -39,9 +41,11 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	common.Success(w, http.StatusOK, UserResponse{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
+		ID:          user.ID,
+		Username:    user.Username,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		AvatarURL:   user.AvatarURL,
 	})
 }
 
@@ -72,8 +76,10 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	response := make([]UserResponse, len(users))
 	for i, user := range users {
 		response[i] = UserResponse{
-			ID:       user.ID,
-			Username: user.Username,
+			ID:          user.ID,
+			Username:    user.Username,
+			DisplayName: user.DisplayName,
+			AvatarURL:   user.AvatarURL,
 		}
 	}
 
