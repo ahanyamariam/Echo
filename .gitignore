@@ -24,6 +24,7 @@ backend/profile.out
 backend/*.exe
 backend/*.test
 backend/go.sum
+backend/uploads/
 
 # Frontend (Node.js/React)
 frontend/node_modules/
