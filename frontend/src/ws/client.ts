@@ -119,6 +119,7 @@ class WebSocketClient {
   }
 
   private handleTypingEvent(data: any): void {
+    console.log('Typing event received:', data);
     const { type, conversation_id, username } = data;
     const chatStore = useChatStore.getState();
 
@@ -252,6 +253,7 @@ class WebSocketClient {
   }
 
   sendTypingIndicator(conversationId: string): boolean {
+    console.log('Emitting typing indicator for conv:', conversationId);
     return this.send({
       type: 'typing',
       conversation_id: conversationId,

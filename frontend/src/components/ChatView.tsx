@@ -24,6 +24,9 @@ const ChatView: React.FC = () => {
   const messages = useChatStore((state) =>
     activeConversationId ? state.messages[activeConversationId] || [] : []
   );
+  const typingUsers = useChatStore((state) =>
+    activeConversationId ? state.typingUsers[activeConversationId] || [] : []
+  );
   const hasMore = useChatStore((state) =>
     activeConversationId ? state.hasMoreMessages[activeConversationId] ?? true : false
   );
@@ -240,10 +243,25 @@ const ChatView: React.FC = () => {
             )}
 
             <MessageList messages={messages} currentUserId={user?.id || ''} />
+
             <div ref={bottomRef} />
           </>
         )}
       </div>
+
+      {/* Typing Indicator Pinned Above Composer */}
+      {typingUsers.length > 0 && (
+        <div className="flex-shrink-0 px-4 py-2 bg-gray-900 text-xs text-gray-400 italic flex items-center gap-2 border-t border-gray-800 animate-pulse">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
+          <span>
+            {typingUsers.length === 1 ? `${typingUsers[0]} is typing...` : `${typingUsers.join(', ')} are typing...`}
+          </span>
+        </div>
+      )}
 
       {/* Composer */}
       <Composer conversationId={activeConversationId!} onMessageSent={() => scrollToBottom()} />
