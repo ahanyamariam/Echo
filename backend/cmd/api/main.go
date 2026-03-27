@@ -136,7 +136,8 @@ func main() {
 
 		// Messages
 		r.Route("/messages", func(r chi.Router) {
- 			r.Get("/", msgsHandler.List)
+			r.Get("/", msgsHandler.List)
+			r.Get("/search", msgsHandler.Search)
 			r.Post("/{id}/view", msgsHandler.MarkAsViewed)
 		})
 

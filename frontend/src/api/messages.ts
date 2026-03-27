@@ -22,6 +22,16 @@ export const messagesApi = {
       hasMore: response.has_more,
     };
   },
+
+  search: async (
+    query: string,
+    limit: number = 20
+  ): Promise<Message[]> => {
+    const response = await apiClient.get<{ messages: Message[] }>(
+      `/messages/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
+    return response.messages;
+  },
 };
 
 export default messagesApi;
