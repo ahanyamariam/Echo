@@ -171,7 +171,7 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 	if msg.ExpiresIn != nil {
 		t := time.Now().Add(time.Duration(*msg.ExpiresIn) * time.Second)
 		expiresAt = &t
-	}
+	} 
 
 	ctx := context.Background()
 	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr, expiresAt, msg.IsOneTime)

@@ -119,7 +119,7 @@ class WebSocketClient {
   }
 
   private handleTypingEvent(data: any): void {
-    const { type, conversation_id, username } = data;
+    const { type, conversation_id, user_id, username } = data;
     const chatStore = useChatStore.getState();
 
     if (type === 'typing_start') {
@@ -212,12 +212,11 @@ class WebSocketClient {
 
   sendMessage(
     conversationId: string,
-    messageType: 'text' | 'image' | 'audio',
+    messageType: 'text' | 'image',
     content: string,
     options?: {
       is_one_time?: boolean;
       expires_in?: number | null;
-      audio_duration?: number;
     }
   ): boolean {
     const data: any = {
@@ -238,9 +237,6 @@ class WebSocketClient {
     }
     if (options?.expires_in) {
       data.expires_in = options.expires_in;
-    }
-    if (options?.audio_duration && messageType === 'audio') {
-      data.audio_duration = options.audio_duration;
     }
 
     return this.send(data);
@@ -297,4 +293,4 @@ class WebSocketClient {
 
 // Singleton instance
 export const wsClient = new WebSocketClient();
-export default wsClient;
+export default wsClient;
