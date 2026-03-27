@@ -40,6 +40,8 @@ type MessageResponse struct {
 	ExpiresAt      *string `json:"expires_at,omitempty"`
 	IsOneTime      bool    `json:"is_one_time"`
 	ViewedAt       *string `json:"viewed_at,omitempty"`
+	AudioDuration  *int    `json:"audio_duration,omitempty"`
+	PlayCount      int     `json:"play_count"`
 }
 
 type ListResponse struct {
@@ -88,6 +90,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			MessageType:    msg.MessageType,
 			CreatedAt:      msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			IsOneTime:      msg.IsOneTime,
+			AudioDuration:  msg.AudioDuration,
+			PlayCount:      msg.PlayCount,
 		}
 
 		if msg.Text != nil {
@@ -166,4 +170,60 @@ func (h *Handler) MarkAsViewed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	common.Success(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// IncrementPlayCount increments the play count for a one-time audio message
+func (h *Handler) IncrementPlayCount(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		common.Error(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	messageID := chi.URLParam(r, "id")
+	if messageID == "" {
+		common.Error(w, http.StatusBadRequest, "message_id is required")
+		return
+	}
+
+	playCount, err := h.service.IncrementPlayCount(r.Context(), messageID, userID)
+	if err != nil {
+		if err.Error() == "not a member" {
+			common.Error(w, http.StatusForbidden, "Not a member of this conversation")
+			return
+		}
+		if err.Error() == "message not found" {
+			common.Error(w, http.StatusNotFound, "Message not found")
+			return
+		}
+		if err.Error() == "not an audio message" {
+			common.Error(w, http.StatusBadRequest, "Not an audio message")
+			return
+		}
+		common.Error(w, http.StatusInternalServerError, "Failed to increment play count")
+		return
+	}
+
+	// Broadcast update via WebSocket
+	msg, _ := h.service.GetByID(r.Context(), messageID)
+	if msg != nil {
+		memberIDs, _ := h.convService.GetMemberIDs(r.Context(), msg.ConversationID)
+		if len(memberIDs) > 0 {
+			update := map[string]interface{}{
+				"type": "message_update",
+				"message": map[string]interface{}{
+					"id":              msg.ID,
+					"conversation_id": msg.ConversationID,
+					"is_one_time":     msg.IsOneTime,
+					"play_count":      playCount,
+				},
+			}
+			h.hub.BroadcastToUsers(memberIDs, update)
+		}
+	}
+
+	common.Success(w, http.StatusOK, map[string]interface{}{
+		"status":     "ok",
+		"play_count": playCount,
+	})
 }

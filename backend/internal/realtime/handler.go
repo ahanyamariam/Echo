@@ -50,6 +50,7 @@ type WSMessageSend struct {
 	MediaURL       string `json:"media_url,omitempty"`
 	IsOneTime      bool   `json:"is_one_time,omitempty"`
 	ExpiresIn      *int64 `json:"expires_in,omitempty"`
+	AudioDuration  *int   `json:"audio_duration,omitempty"`
 }
 
 type WSMessageNew struct {
@@ -68,6 +69,8 @@ type MessagePayload struct {
 	ExpiresAt      *string `json:"expires_at,omitempty"`
 	IsOneTime      bool    `json:"is_one_time"`
 	ViewedAt       *string `json:"viewed_at,omitempty"`
+	AudioDuration  *int    `json:"audio_duration,omitempty"`
+	PlayCount      int     `json:"play_count"`
 }
 
 type WSError struct {
@@ -138,8 +141,8 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 		return
 	}
 
-	if msg.MessageType != "text" && msg.MessageType != "image" {
-		h.sendError(client, "message_type must be 'text' or 'image'")
+	if msg.MessageType != "text" && msg.MessageType != "image" && msg.MessageType != "audio" {
+		h.sendError(client, "message_type must be 'text', 'image', or 'audio'")
 		return
 	}
 
@@ -150,6 +153,11 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 
 	if msg.MessageType == "image" && msg.MediaURL == "" {
 		h.sendError(client, "media_url is required for image messages")
+		return
+	}
+
+	if msg.MessageType == "audio" && msg.MediaURL == "" {
+		h.sendError(client, "media_url is required for audio messages")
 		return
 	}
 
@@ -167,7 +175,7 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 	}
 
 	ctx := context.Background()
-	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr, expiresAt, msg.IsOneTime)
+	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr, expiresAt, msg.IsOneTime, msg.AudioDuration)
 	if err != nil {
 		if err.Error() == "not a member" {
 			h.sendError(client, "Not a member of this conversation")
@@ -204,6 +212,8 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 			ExpiresAt:      expiresAtStr,
 			IsOneTime:      message.IsOneTime,
 			ViewedAt:       nil, // New messages are not viewed yet
+			AudioDuration:  message.AudioDuration,
+			PlayCount:      message.PlayCount,
 		},
 	}
 
