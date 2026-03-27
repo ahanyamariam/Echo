@@ -8,6 +8,7 @@ interface ChatState {
   hasMoreMessages: Record<string, boolean>;
   conversationsLoading: boolean;
   messagesLoading: boolean;
+  typingUsers: Record<string, string[]>; // conversationId -> usernames[]
 
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
@@ -22,6 +23,9 @@ interface ChatState {
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   setHasMore: (conversationId: string, hasMore: boolean) => void;
   removeExpiredMessages: (conversationId: string) => void;
+
+  addTypingUser: (conversationId: string, username: string) => void;
+  removeTypingUser: (conversationId: string, username: string) => void;
 
   setConversationsLoading: (loading: boolean) => void;
   setMessagesLoading: (loading: boolean) => void;
@@ -40,6 +44,7 @@ const initialState = {
   hasMoreMessages: {},
   conversationsLoading: false,
   messagesLoading: false,
+  typingUsers: {},
 };
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -194,6 +199,32 @@ export const useChatStore = create<ChatState>((set) => ({
         messages: {
           ...state.messages,
           [conversationId]: filtered,
+        },
+      };
+    });
+  },
+
+  addTypingUser: (conversationId, username) => {
+    set((state) => {
+      const current = state.typingUsers[conversationId] || [];
+      if (current.includes(username)) return state;
+      return {
+        typingUsers: {
+          ...state.typingUsers,
+          [conversationId]: [...current, username],
+        },
+      };
+    });
+  },
+
+  removeTypingUser: (conversationId, username) => {
+    set((state) => {
+      const current = state.typingUsers[conversationId] || [];
+      if (!current.includes(username)) return state;
+      return {
+        typingUsers: {
+          ...state.typingUsers,
+          [conversationId]: current.filter((u) => u !== username),
         },
       };
     });

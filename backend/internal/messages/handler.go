@@ -172,6 +172,11 @@ func (h *Handler) MarkAsViewed(w http.ResponseWriter, r *http.Request) {
 	common.Success(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+type SearchResponse struct {
+	Messages []MessageResponse `json:"messages"`
+}
+
+func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 // IncrementPlayCount increments the play count for a one-time audio message
 func (h *Handler) IncrementPlayCount(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
@@ -180,6 +185,56 @@ func (h *Handler) IncrementPlayCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		common.Error(w, http.StatusBadRequest, "q (search query) is required")
+		return
+	}
+
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 50 {
+			limit = parsed
+		}
+	}
+
+	messages, err := h.service.Search(r.Context(), userID, query, limit)
+	if err != nil {
+		common.Error(w, http.StatusInternalServerError, "Failed to search messages")
+		return
+	}
+
+	response := make([]MessageResponse, 0, len(messages))
+	for _, msg := range messages {
+		mr := MessageResponse{
+			ID:             msg.ID,
+			ConversationID: msg.ConversationID,
+			SenderID:       msg.SenderID,
+			MessageType:    msg.MessageType,
+			CreatedAt:      msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			IsOneTime:      msg.IsOneTime,
+		}
+
+		if msg.Text != nil {
+			mr.Text = msg.Text
+		}
+		if msg.MediaURL != nil {
+			mr.MediaURL = msg.MediaURL
+		}
+		if msg.ExpiresAt != nil {
+			expiresAtStr := msg.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+			mr.ExpiresAt = &expiresAtStr
+		}
+		if msg.ViewedAt != nil {
+			viewedAtStr := msg.ViewedAt.Format("2006-01-02T15:04:05Z07:00")
+			mr.ViewedAt = &viewedAtStr
+		}
+
+		response = append(response, mr)
+	}
+
+	common.Success(w, http.StatusOK, SearchResponse{
+		Messages: response,
 	messageID := chi.URLParam(r, "id")
 	if messageID == "" {
 		common.Error(w, http.StatusBadRequest, "message_id is required")

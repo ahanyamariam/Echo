@@ -163,6 +163,11 @@ const Composer: React.FC<ComposerProps> = ({ conversationId, onMessageSent }) =>
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     adjustTextareaHeight();
+    
+    // Emit typing indicator
+    if (e.target.value.trim().length > 0) {
+      wsClient.sendTypingIndicator(conversationId);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

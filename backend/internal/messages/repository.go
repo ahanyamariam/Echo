@@ -203,3 +203,49 @@ func (r *Repository) DeleteExpiredMessages(ctx context.Context) (int64, error) {
 	}
 	return result.RowsAffected(), nil
 }
+
+// Search performs a case-insensitive full-text search across messages the user has access to
+func (r *Repository) Search(ctx context.Context, userID, query string, limit int) ([]*Message, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.text, m.media_url, m.created_at, m.expires_at, m.is_one_time, m.viewed_at
+		FROM messages m
+		INNER JOIN conversation_members cm ON cm.conversation_id = m.conversation_id
+		WHERE cm.user_id = $1
+		  AND m.text IS NOT NULL
+		  AND m.text ILIKE '%' || $2 || '%'
+		  AND (m.expires_at IS NULL OR m.expires_at > NOW())
+		ORDER BY m.created_at DESC
+		LIMIT $3
+	`, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []*Message
+	for rows.Next() {
+		var msg Message
+		err := rows.Scan(
+			&msg.ID,
+			&msg.ConversationID,
+			&msg.SenderID,
+			&msg.MessageType,
+			&msg.Text,
+			&msg.MediaURL,
+			&msg.CreatedAt,
+			&msg.ExpiresAt,
+			&msg.IsOneTime,
+			&msg.ViewedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}

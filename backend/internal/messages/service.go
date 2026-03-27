@@ -107,3 +107,7 @@ func (s *Service) IncrementPlayCount(ctx context.Context, messageID, userID stri
 func (s *Service) CleanupExpiredMessages(ctx context.Context) (int64, error) {
 	return s.repo.DeleteExpiredMessages(ctx)
 }
+
+func (s *Service) Search(ctx context.Context, userID, query string, limit int) ([]*Message, error) {
+	return s.repo.Search(ctx, userID, query, limit)
+}

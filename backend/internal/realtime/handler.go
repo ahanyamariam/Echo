@@ -85,6 +85,11 @@ type WSReadUpdate struct {
 	LastReadMessageID string `json:"last_read_message_id"`
 }
 
+type WSTypingEvent struct {
+	Type           string `json:"type"`
+	ConversationID string `json:"conversation_id"`
+}
+
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
@@ -124,6 +129,8 @@ func (h *Handler) handleMessage(client *Client, data []byte) {
 		h.handleMessageSend(client, data)
 	case "read_update":
 		h.handleReadUpdate(client, data)
+	case "typing":
+		h.handleTyping(client, data)
 	default:
 		h.sendError(client, "Unknown message type")
 	}
@@ -172,7 +179,7 @@ func (h *Handler) handleMessageSend(client *Client, data []byte) {
 	if msg.ExpiresIn != nil {
 		t := time.Now().Add(time.Duration(*msg.ExpiresIn) * time.Second)
 		expiresAt = &t
-	}
+	} 
 
 	ctx := context.Background()
 	message, err := h.msgService.Create(ctx, msg.ConversationID, client.UserID, msg.MessageType, textPtr, mediaURLPtr, expiresAt, msg.IsOneTime, msg.AudioDuration)
@@ -267,6 +274,34 @@ func (h *Handler) handleReadUpdate(client *Client, data []byte) {
 			}
 		}
 	}
+}
+
+func (h *Handler) handleTyping(client *Client, data []byte) {
+	var msg WSTypingEvent
+	if err := json.Unmarshal(data, &msg); err != nil {
+		h.sendError(client, "Invalid message format")
+		return
+	}
+
+	if msg.ConversationID == "" {
+		h.sendError(client, "conversation_id is required")
+		return
+	}
+
+	ctx := context.Background()
+	isMember, err := h.convService.IsMember(ctx, msg.ConversationID, client.UserID)
+	if err != nil || !isMember {
+		h.sendError(client, "Not a member of this conversation")
+		return
+	}
+
+	memberIDs, err := h.convService.GetMemberIDs(ctx, msg.ConversationID)
+	if err != nil {
+		log.Printf("Failed to get conversation members: %v", err)
+		return
+	}
+
+	h.hub.SetTyping(client.UserID, client.Username, msg.ConversationID, memberIDs)
 }
 
 func (h *Handler) sendError(client *Client, message string) {
