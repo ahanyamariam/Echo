@@ -21,6 +21,8 @@ type Message struct {
 	ExpiresAt      *time.Time
 	IsOneTime      bool
 	ViewedAt       *time.Time
+	AudioDuration  *int
+	PlayCount      int
 }
 
 type Repository struct {
@@ -38,7 +40,7 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 
 	if before == "" {
 		query = `
-			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
+			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at, audio_duration, COALESCE(play_count, 0)
 			FROM messages
 			WHERE conversation_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
 			ORDER BY created_at DESC
@@ -47,9 +49,9 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 		args = []interface{}{conversationID, limit + 1}
 	} else {
 		query = `
-			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
+			SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at, audio_duration, COALESCE(play_count, 0)
 			FROM messages
-			WHERE conversation_id = $1 
+			WHERE conversation_id = $1
 			  AND (expires_at IS NULL OR expires_at > NOW())
 			  AND created_at < (SELECT created_at FROM messages WHERE id = $2)
 			ORDER BY created_at DESC
@@ -78,6 +80,8 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 			&msg.ExpiresAt,
 			&msg.IsOneTime,
 			&msg.ViewedAt,
+			&msg.AudioDuration,
+			&msg.PlayCount,
 		)
 		if err != nil {
 			return nil, false, err
@@ -103,13 +107,13 @@ func (r *Repository) List(ctx context.Context, conversationID string, limit int,
 }
 
 // Create creates a new message
-func (r *Repository) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time, isOneTime bool) (*Message, error) {
+func (r *Repository) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time, isOneTime bool, audioDuration *int) (*Message, error) {
 	var msg Message
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO messages (conversation_id, sender_id, message_type, text, media_url, expires_at, is_one_time)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
-	`, conversationID, senderID, messageType, text, mediaURL, expiresAt, isOneTime).Scan(
+		INSERT INTO messages (conversation_id, sender_id, message_type, text, media_url, expires_at, is_one_time, audio_duration)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at, audio_duration, COALESCE(play_count, 0)
+	`, conversationID, senderID, messageType, text, mediaURL, expiresAt, isOneTime, audioDuration).Scan(
 		&msg.ID,
 		&msg.ConversationID,
 		&msg.SenderID,
@@ -120,6 +124,8 @@ func (r *Repository) Create(ctx context.Context, conversationID, senderID, messa
 		&msg.ExpiresAt,
 		&msg.IsOneTime,
 		&msg.ViewedAt,
+		&msg.AudioDuration,
+		&msg.PlayCount,
 	)
 	if err != nil {
 		return nil, err
@@ -131,7 +137,7 @@ func (r *Repository) Create(ctx context.Context, conversationID, senderID, messa
 func (r *Repository) GetByID(ctx context.Context, id string) (*Message, error) {
 	var msg Message
 	err := r.db.QueryRow(ctx, `
-		SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at
+		SELECT id, conversation_id, sender_id, message_type, text, media_url, created_at, expires_at, is_one_time, viewed_at, audio_duration, COALESCE(play_count, 0)
 		FROM messages WHERE id = $1
 	`, id).Scan(
 		&msg.ID,
@@ -144,6 +150,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Message, error) {
 		&msg.ExpiresAt,
 		&msg.IsOneTime,
 		&msg.ViewedAt,
+		&msg.AudioDuration,
+		&msg.PlayCount,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -164,6 +172,25 @@ func (r *Repository) MarkAsViewed(ctx context.Context, messageID string) error {
 		return errors.New("message not found or already viewed")
 	}
 	return nil
+}
+
+// IncrementPlayCount increments the play count for a one-time audio message
+// Returns the new play count
+func (r *Repository) IncrementPlayCount(ctx context.Context, messageID string) (int, error) {
+	var playCount int
+	err := r.db.QueryRow(ctx, `
+		UPDATE messages
+		SET play_count = COALESCE(play_count, 0) + 1
+		WHERE id = $1 AND message_type = 'audio'
+		RETURNING play_count
+	`, messageID).Scan(&playCount)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, errors.New("message not found")
+		}
+		return 0, err
+	}
+	return playCount, nil
 }
 
 // DeleteExpiredMessages removes messages that have expired

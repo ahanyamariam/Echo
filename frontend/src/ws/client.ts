@@ -64,9 +64,15 @@ class WebSocketClient {
 
     this.ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        console.log('📨 WebSocket message received:', data.type);
-        this.handleMessage(data);
+        const raw = event.data as string;
+        const parts = raw.split('\n');
+        for (const part of parts) {
+          if (part.trim()) {
+            const data = JSON.parse(part);
+            console.log('📨 WebSocket message received:', data.type);
+            this.handleMessage(data);
+          }
+        }
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
       }
@@ -102,10 +108,6 @@ class WebSocketClient {
       case 'read_update':
         this.handleReadUpdate(data);
         break;
-      case 'typing_start':
-      case 'typing_stop':
-        this.handleTypingEvent(data);
-        break;
       case 'error':
         console.error('WebSocket error from server:', data.error);
         this.emit('error', data);
@@ -116,18 +118,6 @@ class WebSocketClient {
 
     // Emit to registered handlers
     this.emit(type, data);
-  }
-
-  private handleTypingEvent(data: any): void {
-    console.log('Typing event received:', data);
-    const { type, conversation_id, username } = data;
-    const chatStore = useChatStore.getState();
-
-    if (type === 'typing_start') {
-      chatStore.addTypingUser(conversation_id, username);
-    } else {
-      chatStore.removeTypingUser(conversation_id, username);
-    }
   }
 
   private handleNewMessage(data: any): void {
@@ -240,6 +230,9 @@ class WebSocketClient {
     if (options?.expires_in) {
       data.expires_in = options.expires_in;
     }
+    if (options?.audio_duration && messageType === 'audio') {
+      data.audio_duration = options.audio_duration;
+    }
 
     return this.send(data);
   }
@@ -249,14 +242,6 @@ class WebSocketClient {
       type: 'read_update',
       conversation_id: conversationId,
       last_read_message_id: lastReadMessageId,
-    });
-  }
-
-  sendTypingIndicator(conversationId: string): boolean {
-    console.log('Emitting typing indicator for conv:', conversationId);
-    return this.send({
-      type: 'typing',
-      conversation_id: conversationId,
     });
   }
 
@@ -296,4 +281,4 @@ class WebSocketClient {
 
 // Singleton instance
 export const wsClient = new WebSocketClient();
-export default wsClient;
+export default wsClient;

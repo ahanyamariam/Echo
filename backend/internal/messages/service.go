@@ -33,7 +33,7 @@ func (s *Service) List(ctx context.Context, conversationID, userID string, limit
 	return s.repo.List(ctx, conversationID, limit, before)
 }
 
-func (s *Service) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time, isOneTime bool) (*Message, error) {
+func (s *Service) Create(ctx context.Context, conversationID, senderID, messageType string, text, mediaURL *string, expiresAt *time.Time, isOneTime bool, audioDuration *int) (*Message, error) {
 	// Verify membership
 	isMember, err := s.convRepo.IsMember(ctx, conversationID, senderID)
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *Service) Create(ctx context.Context, conversationID, senderID, messageT
 		}
 	}
 
-	return s.repo.Create(ctx, conversationID, senderID, messageType, text, mediaURL, expiresAt, isOneTime)
+	return s.repo.Create(ctx, conversationID, senderID, messageType, text, mediaURL, expiresAt, isOneTime, audioDuration)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*Message, error) {
@@ -77,6 +77,31 @@ func (s *Service) MarkAsViewed(ctx context.Context, messageID, userID string) er
 	}
 
 	return s.repo.MarkAsViewed(ctx, messageID)
+}
+
+// IncrementPlayCount increments the play count for a one-time audio message
+// Returns the new play count and an error if the message is not found or user is not a member
+func (s *Service) IncrementPlayCount(ctx context.Context, messageID, userID string) (int, error) {
+	msg, err := s.repo.GetByID(ctx, messageID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Verify membership
+	isMember, err := s.convRepo.IsMember(ctx, msg.ConversationID, userID)
+	if err != nil {
+		return 0, err
+	}
+	if !isMember {
+		return 0, errors.New("not a member")
+	}
+
+	// Only allow incrementing play count for one-time audio messages
+	if msg.MessageType != "audio" {
+		return 0, errors.New("not an audio message")
+	}
+
+	return s.repo.IncrementPlayCount(ctx, messageID)
 }
 
 func (s *Service) CleanupExpiredMessages(ctx context.Context) (int64, error) {
