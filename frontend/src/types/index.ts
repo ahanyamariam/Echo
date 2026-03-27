@@ -11,18 +11,20 @@ export interface Message {
   id: string;
   conversation_id: string;
   sender_id: string;
-  message_type: 'text' | 'image';
+  message_type: 'text' | 'image' | 'audio';
   text?: string;
   media_url?: string;
   created_at: string;
   expires_at?: string;
-  is_one_time?: boolean;  
-  viewed_at?: string;   
+  is_one_time?: boolean;
+  viewed_at?: string;
+  audio_duration?: number;
+  play_count?: number;
 }
 
 export interface LastMessage {
   id: string;
-  message_type: 'text' | 'image';
+  message_type: 'text' | 'image' | 'audio';
   text?: string;
   sender_id: string;
   created_at: string;
@@ -57,9 +59,10 @@ export interface WSMessage {
 export interface WSMessageSend {
   type: 'message_send';
   conversation_id: string;
-  message_type: 'text' | 'image';
+  message_type: 'text' | 'image' | 'audio';
   text?: string;
   media_url?: string;
+  audio_duration?: number;
 }
 
 export interface WSMessageNew {

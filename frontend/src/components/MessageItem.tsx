@@ -2,27 +2,19 @@ import React, { useState } from 'react';
 import type { Message } from '../types';
 import { markImageViewed } from '../api/uploads';
 import ImageViewer from './ImageViewer';
+import AudioPlayer from './AudioPlayer';
 
 interface MessageItemProps {
   message: Message;
   isOwn: boolean;
   showAvatar?: boolean;
+  onPlayCountUpdate?: (messageId: string, newCount: number) => void;
 }
 
-const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = true }) => {
+const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = true, onPlayCountUpdate }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [isViewed, setIsViewed] = useState(!!message.viewed_at);
   const [viewError, setViewError] = useState(false);
-
-  // ADD THIS DEBUG LOG AT THE TOP
-  console.log('🖼️ MessageItem render:', {
-    id: message.id,
-    type: message.message_type,
-    is_one_time: message.is_one_time,
-    viewed_at: message.viewed_at,
-    isOwn: isOwn,
-    isViewed: !!message.viewed_at || isViewed
-  });
 
   const formatTime = (dateString: string) => {
     return new Date(dateString).toLocaleTimeString([], {
@@ -51,7 +43,6 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
   };
 
   const handleImageClick = async () => {
-    // One-time image logic for recipient
     if (message.is_one_time && !isOwn && !isViewed && !viewError) {
       try {
         await markImageViewed(message.id);
@@ -60,33 +51,38 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
       } catch (error) {
         console.error('Failed to mark image as viewed:', error);
         setViewError(true);
-        setViewerOpen(true); // Still show even if marking fails
+        setViewerOpen(true);
       }
     } else {
       setViewerOpen(true);
     }
   };
 
+  const handleAudioPlayCountUpdate = (newCount: number) => {
+    if (onPlayCountUpdate) {
+      onPlayCountUpdate(message.id, newCount);
+    }
+  };
+
   const expiryTime = getTimeUntilExpiry();
-  const isOneTimeHidden = message.is_one_time && isViewed;
+  const isOneTimeHidden = message.message_type === 'image' && message.is_one_time && isViewed;
 
   return (
     <>
       <div
-        className={`flex ${isOwn ? 'justify-end' : 'justify-start'} ${showAvatar ? 'mt-2' : 'mt-0.5'
-          } animate-fade-in`}
+        className={`flex ${isOwn ? 'justify-end' : 'justify-start'} ${showAvatar ? 'mt-2' : 'mt-0.5'} animate-fade-in`}
       >
         <div
-          className={`max-w-[75%] md:max-w-[65%] rounded-2xl px-4 py-2 ${isOwn
-            ? 'bg-blue-600 text-white rounded-br-sm'
-            : 'bg-gray-700 text-white rounded-bl-sm'
-            }`}
+          className={`max-w-[75%] md:max-w-[65%] rounded-2xl px-4 py-2 ${
+            isOwn
+              ? 'bg-blue-600 text-white rounded-br-sm'
+              : 'bg-gray-700 text-white rounded-bl-sm'
+          }`}
         >
           {/* Image Message */}
           {message.message_type === 'image' && message.media_url && (
             <div className="mb-1">
               {isOneTimeHidden ? (
-                // One-time image already viewed - show placeholder
                 <div className="bg-gray-800 rounded-lg p-8 text-center min-w-[200px]">
                   <svg
                     className="w-12 h-12 mx-auto mb-2 text-gray-500"
@@ -104,7 +100,6 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
                   <p className="text-gray-400 text-sm">Photo viewed</p>
                 </div>
               ) : message.is_one_time && !isViewed ? (
-                // One-time image not yet viewed - show closed message state
                 <div
                   onClick={handleImageClick}
                   className="bg-gray-800 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-750 transition border border-dashed border-gray-600 min-w-[200px]"
@@ -128,7 +123,6 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
                   <p className="text-gray-400 text-xs mt-1">Tap to open</p>
                 </div>
               ) : (
-                // Normal image OR sender's view of one-time image
                 <div className="relative">
                   <img
                     src={`${import.meta.env.VITE_API_URL}${message.media_url}`}
@@ -137,7 +131,6 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
                     loading="lazy"
                     onClick={handleImageClick}
                   />
-                  {/* One-time badge */}
                   {message.is_one_time && (
                     <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
                       <svg
@@ -166,6 +159,21 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
             </div>
           )}
 
+          {/* Audio Message */}
+          {message.message_type === 'audio' && message.media_url && (
+            <div className="mb-1">
+              <AudioPlayer
+                src={`${import.meta.env.VITE_API_URL}${message.media_url}`}
+                duration={message.audio_duration}
+                isOneTime={message.is_one_time}
+                playCount={message.play_count || 0}
+                messageId={message.id}
+                isOwn={isOwn}
+                onPlayCountUpdate={handleAudioPlayCountUpdate}
+              />
+            </div>
+          )}
+
           {/* Text Message */}
           {message.message_type === 'text' && message.text && (
             <p className="break-words whitespace-pre-wrap">{message.text}</p>
@@ -173,11 +181,12 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
 
           {/* Time, Status, and Expiry */}
           <div
-            className={`flex items-center justify-end gap-1 mt-1 ${isOwn ? 'text-blue-200' : 'text-gray-400'
-              }`}
+            className={`flex items-center justify-end gap-1 mt-1 ${
+              isOwn ? 'text-blue-200' : 'text-gray-400'
+            }`}
           >
-            {/* One-time "Opened" indicator for sender */}
-            {message.is_one_time && isOwn && message.viewed_at && (
+            {/* One-time "Opened" indicator for sender (images) */}
+            {message.message_type === 'image' && message.is_one_time && isOwn && message.viewed_at && (
               <span className="text-xs flex items-center gap-0.5 mr-1">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
@@ -187,6 +196,16 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
                     clipRule="evenodd"
                   />
                 </svg>
+              </span>
+            )}
+
+            {/* Play count indicator for sender (audio) */}
+            {message.message_type === 'audio' && message.is_one_time && isOwn && (message.play_count || 0) > 0 && (
+              <span className="text-xs flex items-center gap-0.5 mr-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <span>{message.play_count}x</span>
               </span>
             )}
 
@@ -222,13 +241,12 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwn, showAvatar = 
       </div>
 
       {/* Image Viewer Modal */}
-      {viewerOpen && message.media_url && (
+      {viewerOpen && message.media_url && message.message_type === 'image' && (
         <ImageViewer
           imageUrl={`${import.meta.env.VITE_API_URL}${message.media_url}`}
           isOneTime={message.is_one_time && !isOwn}
           onClose={() => {
             setViewerOpen(false);
-            // Mark as viewed locally when closing one-time image
             if (message.is_one_time && !isOwn) {
               setIsViewed(true);
             }
