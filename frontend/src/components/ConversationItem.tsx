@@ -40,6 +40,9 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
     if (conversation.last_message.message_type === 'image') {
       return '📷 Photo';
     }
+    if (conversation.last_message.message_type === 'audio') {
+      return '🎤 Voice message';
+    }
     return conversation.last_message.text || '';
   };
 
