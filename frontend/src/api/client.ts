@@ -1,3 +1,5 @@
+import { useAuthStore } from '../store/authStore';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 class ApiClient {
@@ -8,7 +10,7 @@ class ApiClient {
     }
 
     private getToken(): string | null {
-        return localStorage.getItem('token');
+        return useAuthStore.getState().token || localStorage.getItem('token');
     }
 
     private getHeaders(includeAuth: boolean = true): HeadersInit {

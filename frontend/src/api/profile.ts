@@ -1,3 +1,5 @@
+import { useAuthStore } from '../store/authStore';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export interface Profile {
@@ -29,10 +31,13 @@ export interface PublicProfile {
   bio?: string;
 }
 
-const getAuthHeaders = () => ({
-  'Authorization': `Bearer ${localStorage.getItem('token')}`,
-  'Content-Type': 'application/json',
-});
+const getAuthHeaders = () => {
+  const token = useAuthStore.getState().token || localStorage.getItem('token');
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 export async function getMyProfile(): Promise<FullProfile> {
   const response = await fetch(`${API_URL}/users/me/profile`, {
@@ -78,7 +83,7 @@ export async function uploadAvatar(file: File): Promise<string> {
   const response = await fetch(`${API_URL}/users/me/avatar`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      'Authorization': `Bearer ${useAuthStore.getState().token || localStorage.getItem('token')}`,
     },
     body: formData,
   });
