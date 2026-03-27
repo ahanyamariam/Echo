@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 )
 
 // Hub maintains the set of active clients and broadcasts messages
@@ -22,6 +23,10 @@ type Hub struct {
 
 	// Mutex for thread-safe access to clients map
 	mu sync.RWMutex
+
+	// Typing indicator timers keyed by "userID:conversationID"
+	typingTimers map[string]*time.Timer
+	typingMu     sync.Mutex
 }
 
 // BroadcastMessage represents a message to be sent to specific users
@@ -33,10 +38,11 @@ type BroadcastMessage struct {
 // NewHub creates a new Hub instance
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[string]map[*Client]bool),
-		broadcast:  make(chan *BroadcastMessage, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		clients:      make(map[string]map[*Client]bool),
+		broadcast:    make(chan *BroadcastMessage, 256),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		typingTimers: make(map[string]*time.Timer),
 	}
 }
 
@@ -51,6 +57,7 @@ func (h *Hub) Run() {
 			}
 			h.clients[client.UserID][client] = true
 			h.mu.Unlock()
+
 			log.Printf("Client registered: %s (%s). Total connections for user: %d",
 				client.Username, client.UserID, len(h.clients[client.UserID]))
 
@@ -63,6 +70,7 @@ func (h *Hub) Run() {
 					if len(userClients) == 0 {
 						delete(h.clients, client.UserID)
 					}
+
 					log.Printf("Client unregistered: %s (%s). Remaining connections: %d",
 						client.Username, client.UserID, len(userClients))
 				}
@@ -123,4 +131,71 @@ func (h *Hub) GetOnlineUsers(userIDs []string) []string {
 		}
 	}
 	return online
+}
+
+// SetTyping manages typing indicator state with automatic timeout.
+// Uses time.AfterFunc to broadcast typing_stop after 3 seconds of inactivity.
+func (h *Hub) SetTyping(userID, username, conversationID string, memberIDs []string) {
+	key := userID + ":" + conversationID
+
+	// Build the list of other members to notify
+	otherMembers := make([]string, 0, len(memberIDs)-1)
+	for _, id := range memberIDs {
+		if id != userID {
+			otherMembers = append(otherMembers, id)
+		}
+	}
+	if len(otherMembers) == 0 {
+		return
+	}
+
+	h.typingMu.Lock()
+	defer h.typingMu.Unlock()
+
+	if timer, exists := h.typingTimers[key]; exists {
+		// User is already typing — reset the timer
+		timer.Reset(3 * time.Second)
+		return
+	}
+
+	// New typing session — broadcast typing_start
+	startMsg := map[string]string{
+		"type":            "typing_start",
+		"conversation_id": conversationID,
+		"user_id":         userID,
+		"username":        username,
+	}
+	if err := h.BroadcastToUsers(otherMembers, startMsg); err != nil {
+		log.Printf("Failed to broadcast typing_start: %v", err)
+	}
+
+	// Set a 3-second timer — when it fires, broadcast typing_stop
+	h.typingTimers[key] = time.AfterFunc(3*time.Second, func() {
+		stopMsg := map[string]string{
+			"type":            "typing_stop",
+			"conversation_id": conversationID,
+			"user_id":         userID,
+			"username":        username,
+		}
+		if err := h.BroadcastToUsers(otherMembers, stopMsg); err != nil {
+			log.Printf("Failed to broadcast typing_stop: %v", err)
+		}
+
+		h.typingMu.Lock()
+		delete(h.typingTimers, key)
+		h.typingMu.Unlock()
+	})
+}
+
+// StopTyping immediately stops typing indicator for a user (e.g., on disconnect).
+func (h *Hub) StopTyping(userID, conversationID string) {
+	key := userID + ":" + conversationID
+
+	h.typingMu.Lock()
+	defer h.typingMu.Unlock()
+
+	if timer, exists := h.typingTimers[key]; exists {
+		timer.Stop()
+		delete(h.typingTimers, key)
+	}
 }

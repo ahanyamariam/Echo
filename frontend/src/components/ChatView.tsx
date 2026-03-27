@@ -36,6 +36,9 @@ const ChatView: React.FC = () => {
   const resetUnreadCount = useChatStore((state) => state.resetUnreadCount);
   const removeExpiredMessages = useChatStore((state) => state.removeExpiredMessages);
   const updateConversationUser = useChatStore((state) => state.updateConversationUser);
+  const typingUsers = useChatStore((state) => 
+    activeConversationId ? (state.typingUsers[activeConversationId] || []) : []
+  );
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
@@ -59,7 +62,7 @@ const ChatView: React.FC = () => {
             avatar_url: profile.avatar_url,
           });
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [activeConversationId]);
 
@@ -244,6 +247,18 @@ const ChatView: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Typing Indicator */}
+      {typingUsers.length > 0 && (
+        <div className="px-4 py-1 text-xs text-gray-400 italic animate-pulse flex items-center gap-1">
+          <div className="flex gap-0.5">
+            <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+          </div>
+          {typingUsers.length === 1 ? `${typingUsers[0]} is typing...` : `${typingUsers.join(', ')} are typing...`}
+        </div>
+      )}
 
       {/* Composer */}
       <Composer conversationId={activeConversationId!} onMessageSent={() => scrollToBottom()} />

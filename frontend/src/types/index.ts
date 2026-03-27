@@ -16,8 +16,8 @@ export interface Message {
   media_url?: string;
   created_at: string;
   expires_at?: string;
-  is_one_time?: boolean;  
-  viewed_at?: string;   
+  is_one_time?: boolean;
+  viewed_at?: string;
 }
 
 export interface LastMessage {

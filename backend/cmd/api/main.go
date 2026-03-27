@@ -47,13 +47,13 @@ func main() {
 	convsRepo := conversations.NewRepository(pool)
 	msgsRepo := messages.NewRepository(pool)
 	profileRepo := profile.NewRepository(pool)
-
+ 
 	// Initialize services
 	authService := auth.NewService(authRepo, cfg.JWTSecret, cfg.JWTExpiry)
 	usersService := users.NewService(usersRepo)
-	convsService := conversations.NewService(convsRepo)
-	msgsService := messages.NewService(msgsRepo, convsRepo)
-	profileService := profile.NewService(profileRepo, cfg.UploadDir)
+ 	convsService := conversations.NewService(convsRepo)
+ 	msgsService := messages.NewService(msgsRepo, convsRepo)
+ 	profileService := profile.NewService(profileRepo, cfg.UploadDir)
 
 	// Initialize WebSocket hub
 	hub := realtime.NewHub()
@@ -136,7 +136,7 @@ func main() {
 
 		// Messages
 		r.Route("/messages", func(r chi.Router) {
-			r.Get("/", msgsHandler.List)
+ 			r.Get("/", msgsHandler.List)
 			r.Post("/{id}/view", msgsHandler.MarkAsViewed)
 		})
 

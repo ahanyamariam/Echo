@@ -102,6 +102,10 @@ class WebSocketClient {
       case 'read_update':
         this.handleReadUpdate(data);
         break;
+      case 'typing_start':
+      case 'typing_stop':
+        this.handleTypingEvent(data);
+        break;
       case 'error':
         console.error('WebSocket error from server:', data.error);
         this.emit('error', data);
@@ -112,6 +116,17 @@ class WebSocketClient {
 
     // Emit to registered handlers
     this.emit(type, data);
+  }
+
+  private handleTypingEvent(data: any): void {
+    const { type, conversation_id, username } = data;
+    const chatStore = useChatStore.getState();
+
+    if (type === 'typing_start') {
+      chatStore.addTypingUser(conversation_id, username);
+    } else {
+      chatStore.removeTypingUser(conversation_id, username);
+    }
   }
 
   private handleNewMessage(data: any): void {
@@ -232,6 +247,13 @@ class WebSocketClient {
       type: 'read_update',
       conversation_id: conversationId,
       last_read_message_id: lastReadMessageId,
+    });
+  }
+
+  sendTypingIndicator(conversationId: string): boolean {
+    return this.send({
+      type: 'typing',
+      conversation_id: conversationId,
     });
   }
 
