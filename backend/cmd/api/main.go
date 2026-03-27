@@ -14,6 +14,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/ahanyamariam/echo/internal/analytics"
 	"github.com/ahanyamariam/echo/internal/auth"
 	"github.com/ahanyamariam/echo/internal/config"
 	"github.com/ahanyamariam/echo/internal/conversations"
@@ -48,12 +49,16 @@ func main() {
 	msgsRepo := messages.NewRepository(pool)
 	profileRepo := profile.NewRepository(pool)
 
+	// Initialize analytics repository
+	analyticsRepo := analytics.NewRepository(pool)
+
 	// Initialize services
 	authService := auth.NewService(authRepo, cfg.JWTSecret, cfg.JWTExpiry)
 	usersService := users.NewService(usersRepo)
 	convsService := conversations.NewService(convsRepo)
 	msgsService := messages.NewService(msgsRepo, convsRepo)
 	profileService := profile.NewService(profileRepo, cfg.UploadDir)
+	analyticsService := analytics.NewService(analyticsRepo, convsRepo)
 
 	// Initialize WebSocket hub
 	hub := realtime.NewHub()
@@ -72,6 +77,7 @@ func main() {
 	msgsHandler := messages.NewHandler(msgsService, convsService, hub)
 	uploadsHandler := uploads.NewHandler(cfg.UploadDir)
 	profileHandler := profile.NewHandler(profileService)
+	analyticsHandler := analytics.NewHandler(analyticsService)
 	wsHandler := realtime.NewHandler(hub, authService, msgsService, convsService)
 
 	// Setup router
@@ -147,6 +153,9 @@ func main() {
 
 		// Uploads
 		r.Post("/uploads", uploadsHandler.Upload)
+
+		// Analytics — message statistics with string analysis & mathematical computations
+		r.Get("/analytics/conversations/{id}", analyticsHandler.GetConversationAnalytics)
 	})
 
 	// Serve uploaded files (including avatars)
