@@ -84,6 +84,10 @@ func main() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
 
+	// Rate Limiting — Token Bucket algorithm: 10 burst capacity, 2 tokens/sec refill
+	rateLimiter := middleware.NewRateLimiter(10, 2)
+	r.Use(rateLimiter.Middleware())
+
 	// CORS
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -180,6 +184,9 @@ func main() {
 
 	// Stop cleanup job
 	cleanupJob.Stop()
+
+	// Stop rate limiter cleanup goroutine
+	rateLimiter.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
